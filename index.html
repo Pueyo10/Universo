@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Milky Way — Interactive Universe · Vía Láctea — Universo interactivo</title>
+  <meta name="description" content="A real-time explorable 3D universe: Milky Way, Solar System, planets, moons, nebulae and Sagittarius A*. Universo 3D explorable en tiempo real." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%225%22 fill=%22%23fff%22/%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2212%22 fill=%22none%22 stroke=%22%237fb4ff%22 stroke-width=%221.5%22 opacity=%22.7%22/%3E%3C/svg%3E" />
+  <script type="module" crossorigin src="./assets/index-B3wEKzzH.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/three.core-CpYT6u8q.js">
+  <link rel="modulepreload" crossorigin href="./assets/EventBus-DzLmJ1Bg.js">
+  <link rel="modulepreload" crossorigin href="./assets/Units-B-K3UxBs.js">
+  <link rel="modulepreload" crossorigin href="./assets/Random-BQY5ImTV.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-BnbFV-bH.css">
+</head>
+<body>
+  <div id="app">
+    <canvas id="gl"></canvas>
+    <div id="labels" aria-hidden="true"></div>
+
+    <!-- HUD -->
+    <div id="hud">
+      <header class="hud-top">
+        <div class="brand">
+          <div class="brand-name" data-i18n="brandName">MILKY WAY</div>
+          <div class="brand-sub" data-i18n="brandSub">Interactive Universe</div>
+        </div>
+
+        <div class="search" id="search">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" width="14" height="14"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <input id="search-input" type="text" autocomplete="off" spellcheck="false" data-i18n-ph="searchPlaceholder" placeholder="Search — Earth, Saturn, Sagittarius A*, Orion Nebula, Voyager 1…" />
+            <kbd class="search-kbd">/</kbd>
+          </div>
+          <div id="search-results" class="search-results" hidden></div>
+        </div>
+
+        <div class="top-right">
+          <button id="btn-tour" class="btn btn-accent" data-i18n-title="tourTitle" title="Cinematic Tour (T)">
+            <span class="dot"></span> <span data-i18n="tour">Cinematic Tour</span>
+          </button>
+          <button id="btn-lang" class="btn btn-icon btn-lang" title="Cambiar a español">ES</button>
+          <button id="btn-database" class="btn btn-icon" data-i18n-title="database" title="Cosmic Database (B)">
+            <svg viewBox="0 0 24 24" width="15" height="15"><ellipse cx="12" cy="6" rx="8" ry="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          </button>
+          <button id="btn-science" class="btn btn-icon" data-i18n-title="science" title="Science">
+            <svg viewBox="0 0 24 24" width="15" height="15"><circle cx="12" cy="12" r="2.2" fill="currentColor"/><ellipse cx="12" cy="12" rx="9" ry="3.6" fill="none" stroke="currentColor" stroke-width="1.4"/><ellipse cx="12" cy="12" rx="9" ry="3.6" fill="none" stroke="currentColor" stroke-width="1.4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9" ry="3.6" fill="none" stroke="currentColor" stroke-width="1.4" transform="rotate(-60 12 12)"/></svg>
+          </button>
+          <button id="btn-help" class="btn btn-icon" data-i18n-title="help" title="Controls (?)">?</button>
+          <button id="btn-settings" class="btn btn-icon" data-i18n-title="settings" title="Settings">
+            <svg viewBox="0 0 24 24" width="15" height="15"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </button>
+          <button id="btn-photo" class="btn btn-icon" data-i18n-title="photoMode" title="Photo mode (F2)">
+            <svg viewBox="0 0 24 24" width="15" height="15"><rect x="3" y="7" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="13.5" r="3.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 7l1.5-3h5L16 7" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          </button>
+          <button id="btn-hide-ui" class="btn btn-icon" data-i18n-title="hideUI" title="Hide UI (H)">
+            <svg viewBox="0 0 24 24" width="15" height="15"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Info panel -->
+      <aside id="info-panel" class="info-panel" hidden>
+        <div class="info-head">
+          <div class="info-kind" id="info-kind">PLANET</div>
+          <button class="btn btn-icon info-close" id="info-close" data-i18n-title="close" title="Close (Esc)">×</button>
+        </div>
+        <h2 class="info-name" id="info-name">Earth</h2>
+        <div class="info-sub" id="info-sub"></div>
+        <div class="info-actions">
+          <button class="btn" id="info-focus" data-i18n="focus">Focus</button>
+          <button class="btn btn-accent" id="info-travel" data-i18n="travelTo">Travel to</button>
+          <button class="btn" id="info-follow" data-i18n="follow">Follow</button>
+          <button class="btn" id="info-observe" data-i18n="observe" title="Auto-cinematic (25 s)">Observe</button>
+          <button class="btn" id="info-supernova" data-i18n="supernovaStart" hidden>Simulate supernova</button>
+        </div>
+        <div class="info-actions info-tools">
+          <button class="btn" id="info-bookmark" data-i18n="bookmark" title="Bookmark">☆</button>
+          <button class="btn" id="info-compare" data-i18n="compareSize">Compare size</button>
+          <button class="btn" id="info-measure" data-i18n="measure">Measure</button>
+        </div>
+        <div class="info-grid" id="info-grid"></div>
+        <p class="info-desc" id="info-desc"></p>
+        <div class="info-facts" id="info-facts"></div>
+        <div id="info-science"></div>
+        <div class="info-section info-grid" id="info-speedrefs"></div>
+        <div class="info-children" id="info-children"></div>
+      </aside>
+
+      <!-- Bottom -->
+      <footer class="hud-bottom">
+        <div class="bottom-left">
+          <div class="readout"><span class="ro-label" data-i18n="region">Region</span><span class="ro-value" id="ro-region">—</span></div>
+          <div class="readout"><span class="ro-label" data-i18n="position">Position</span><span class="ro-value mono" id="ro-pos">—</span></div>
+          <div class="readout"><span class="ro-label" data-i18n="target">Target</span><span class="ro-value mono" id="ro-target">—</span></div>
+          <div class="readout"><span class="ro-label" data-i18n="speed">Speed</span><span class="ro-value mono" id="ro-speed">—</span></div>
+          <div class="readout"><span class="ro-label" data-i18n="camera">Camera</span><span class="ro-value" id="ro-camera">FREE</span></div>
+        </div>
+
+        <div class="bottom-center">
+          <div class="time-date mono" id="time-date">—</div>
+          <div class="time-controls" id="time-controls">
+            <button class="tbtn" data-speed="0" data-i18n-title="pause" title="Pause (Space)">❚❚</button>
+            <button class="tbtn" data-speed="1">1×</button>
+            <button class="tbtn" data-speed="10">10×</button>
+            <button class="tbtn" data-speed="100">100×</button>
+            <button class="tbtn" data-speed="1000">1k×</button>
+            <button class="tbtn" data-speed="10000">10k×</button>
+            <button class="tbtn" data-speed="100000">100k×</button>
+            <button class="tbtn" data-speed="1000000">1M×</button>
+            <button class="tbtn" data-speed="10000000">10M×</button>
+            <button class="tbtn tbtn-now" id="btn-now" data-i18n="now" data-i18n-title="nowTitle" title="Reset to current date (N)">now</button>
+          </div>
+        </div>
+
+        <div class="bottom-right">
+          <button class="tog" id="tog-orbits" data-on="true" data-i18n="orbits" data-i18n-title="orbitsT" title="Orbits (O)">Orbits</button>
+          <button class="tog" id="tog-labels" data-on="true" data-i18n="labels" data-i18n-title="labelsT" title="Labels (L)">Labels</button>
+          <button class="tog" id="tog-constellations" data-on="false" data-i18n="constellations" data-i18n-title="constellationsT" title="Constellations (C)">Constellations</button>
+          <button class="tog" id="tog-grid" data-on="false" data-i18n="grid" data-i18n-title="gridT" title="Grid (G)">Grid</button>
+          <button class="tog" id="tog-scale" data-on="false" data-i18n="realScale" data-i18n-title="realScaleT" title="Real scale / Visual scale (V)">Real scale</button>
+          <button class="tog" id="tog-physics" data-on="false" data-i18n="physics" data-i18n-title="physicsViz" title="Physics visualization (P)">Physics</button>
+          <button class="tog" id="tog-flight" data-on="false" data-i18n="flight" data-i18n-title="flightMode" title="Flight model (4)">Flight</button>
+          <button class="tog" id="tog-map" data-on="false" data-i18n="map" data-i18n-title="mapT" title="Star map (K)">Map</button>
+          <button class="tog" id="tog-audio" data-on="false" data-i18n="audio" data-i18n-title="audioT" title="Ambient audio (M)">Audio</button>
+          <button class="tog" id="btn-reset" data-i18n="reset" data-i18n-title="resetT" title="Reset camera (R)">Reset</button>
+          <button class="tog" id="tog-debug" data-on="false" data-i18n="stats" data-i18n-title="statsT" title="Stats (F3)">Stats</button>
+        </div>
+      </footer>
+
+      <!-- Ship instruments (realistic flight) -->
+      <div id="ship-hud" class="ship-hud mono" hidden></div>
+      <!-- Travel readout -->
+      <div id="travel-hud" class="travel-hud" hidden></div>
+
+      <!-- Debug -->
+      <div id="debug-panel" class="debug-panel mono" hidden></div>
+
+      <!-- Photo mode -->
+      <div id="photo-panel" class="panel photo-panel" hidden>
+        <div class="photo-head"><div class="panel-title" data-i18n="photoMode">Photo mode</div><button class="btn btn-icon info-close" id="photo-close">×</button></div>
+        <label class="row"><span data-i18n="fov">Field of view</span><input id="photo-fov" type="range" min="15" max="100" step="0.5" value="55"></label>
+        <label class="row"><span data-i18n="exposure">Exposure</span><input id="photo-exposure" type="range" min="0.05" max="4" step="0.01" value="1"></label>
+        <label class="row"><span data-i18n="roll">Roll</span><input id="photo-roll" type="range" min="-180" max="180" step="0.5" value="0"></label>
+        <label class="row"><span data-i18n="grain">Grain</span><input id="photo-grain" type="range" min="0" max="0.12" step="0.005" value="0.03"></label>
+        <label class="row"><span data-i18n="vignette">Vignette</span><input id="photo-vignette" type="range" min="0" max="0.9" step="0.01" value="0.32"></label>
+        <label class="row"><span data-i18n="labels">Labels</span><input id="photo-labels" type="checkbox"></label>
+        <div class="row row-btns"><button class="btn" id="photo-pause" data-i18n="pauseTime">Pause / resume time</button><button class="btn" id="photo-hide" data-i18n="photoHide">Hide this panel</button></div>
+        <div class="panel-foot" data-i18n="photoNote">Use your browser or OS screenshot tool to capture. H hides everything else.</div>
+      </div>
+
+      <!-- Cosmic database -->
+      <div id="database" class="panel database" hidden>
+        <div class="panel-title" data-i18n="database">Cosmic Database</div>
+        <input id="db-search" type="text" class="db-search" data-i18n-ph="dbSearch" placeholder="Filter…" autocomplete="off" spellcheck="false">
+        <div id="db-tabs" class="db-tabs"></div>
+        <div id="db-body" class="db-body"></div>
+      </div>
+      <canvas id="starmap" class="starmap" width="260" height="260" hidden></canvas>
+
+      <!-- Tours -->
+      <div id="tour-menu" class="panel tour-menu" hidden>
+        <div class="panel-title" data-i18n="toursTitle">Guided tours</div>
+        <div id="tour-list"></div>
+      </div>
+
+      <!-- Science -->
+      <div id="science-panel" class="panel science-panel" hidden>
+        <div class="panel-title" data-i18n="science">Science</div>
+        <label class="row"><span data-i18n="flightMode">Flight model</span>
+          <select id="sci-flight">
+            <option value="explore" data-i18n="flightExploration">Exploration (free camera)</option>
+            <option value="real" data-i18n="flightRealistic">Realistic (inertia + gravity)</option>
+          </select>
+        </label>
+        <label class="row"><span data-i18n="physicsViz">Physics visualization</span><input id="sci-physics" type="checkbox"></label>
+        <label class="row"><span data-i18n="hzToggle">Habitable zone overlay</span><input id="sci-hz" type="checkbox"></label>
+        <label class="row"><span data-i18n="magnetosphere">Magnetospheres</span><input id="sci-mag" type="checkbox"></label>
+        <label class="row"><span data-i18n="heliosphere">Heliosphere</span><input id="sci-helio" type="checkbox"></label>
+        <label class="row"><span data-i18n="solarWind">Solar wind</span><input id="sci-wind" type="checkbox"></label>
+        <label class="row"><span data-i18n="redshift">Redshift / blueshift</span><input id="sci-redshift" type="checkbox"></label>
+        <label class="row"><span data-i18n="observatory">Observatory</span>
+          <select id="sci-band">
+            <option value="visible" data-i18n="bandVisible">Visible light</option>
+            <option value="infrared" data-i18n="bandInfrared">Infrared</option>
+            <option value="uv" data-i18n="bandUv">Ultraviolet</option>
+            <option value="xray" data-i18n="bandXray">X-ray</option>
+            <option value="radio" data-i18n="bandRadio">Radio</option>
+          </select>
+        </label>
+        <div class="panel-foot" id="sci-band-note"></div>
+        <div class="row row-btns">
+          <button class="btn" id="sci-solar-eclipse" data-i18n="nextSolarEclipse">Next solar eclipse (Earth)</button>
+          <button class="btn" id="sci-lunar-eclipse" data-i18n="nextLunarEclipse">Next lunar eclipse</button>
+        </div>
+        <div id="science-extra"></div>
+      </div>
+
+      <!-- Settings -->
+      <div id="settings-panel" class="panel settings-panel" hidden>
+        <div class="panel-title" data-i18n="setTitle">Settings</div>
+        <label class="row"><span data-i18n="language">Language</span>
+          <select id="set-lang">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+          </select>
+        </label>
+        <label class="row"><span data-i18n="quality">Quality</span>
+          <select id="set-quality">
+            <option value="auto" selected data-i18n="qAuto">Auto</option>
+            <option value="low" data-i18n="qLow">Low</option>
+            <option value="medium" data-i18n="qMedium">Medium</option>
+            <option value="high" data-i18n="qHigh">High</option>
+            <option value="ultra" data-i18n="qUltra">Ultra</option>
+          </select>
+        </label>
+        <label class="row"><span data-i18n="bloom">Bloom</span><input id="set-bloom" type="range" min="0" max="2" step="0.05" value="0.9"></label>
+        <label class="row"><span data-i18n="exposure">Exposure</span><input id="set-exposure" type="range" min="0.2" max="3" step="0.05" value="1"></label>
+        <label class="row"><span data-i18n="starDensity">Star density</span><input id="set-stars" type="range" min="0.3" max="2" step="0.05" value="1"></label>
+        <label class="row"><span data-i18n="fov">Field of view</span><input id="set-fov" type="range" min="30" max="90" step="1" value="55"></label>
+        <label class="row"><span data-i18n="sensitivity">Mouse sensitivity</span><input id="set-sens" type="range" min="0.3" max="2.5" step="0.05" value="1"></label>
+        <label class="row"><span data-i18n="autoExposure">Auto exposure</span><input id="set-autoexp" type="checkbox" checked></label>
+        <label class="row"><span data-i18n="lensEffects">Lens effects</span><input id="set-lens" type="checkbox" checked></label>
+        <label class="row"><span data-i18n="discoveryToggle">Discoveries &amp; facts</span><input id="set-discovery" type="checkbox" checked></label>
+        <label class="row"><span data-i18n="invertY">Invert Y</span><input id="set-inverty" type="checkbox"></label>
+        <div class="panel-foot" data-i18n="credits">Planet textures © Solar System Scope (CC BY 4.0). Everything else is procedural.</div>
+      </div>
+
+      <!-- Help -->
+      <div id="help-panel" class="panel help-panel" hidden>
+        <div class="panel-title" data-i18n="helpTitle">Controls</div>
+        <div class="help-grid">
+          <span data-i18n="hLook">Look</span><span data-i18n="hLookV">Drag with the mouse</span>
+          <span data-i18n="hMove">Move</span><span data-i18n="hMoveV">W A S D · Q E up/down</span>
+          <span data-i18n="hBoost">Boost / Slow</span><span data-i18n="hBoostV">Shift / Ctrl</span>
+          <span data-i18n="hZoom">Zoom</span><span data-i18n="hZoomV">Mouse wheel (logarithmic, toward target)</span>
+          <span data-i18n="hSelect">Select</span><span data-i18n="hSelectV">Click an object · double-click travels there</span>
+          <span data-i18n="hTravel">Travel</span><span data-i18n="hTravelV">Enter (to selection) · F focus · Shift+F follow</span>
+          <span data-i18n="hSearch">Search</span><span data-i18n="hSearchV">/ or Ctrl+K</span>
+          <span data-i18n="hTime">Time</span><span data-i18n="hTimeV">Space pause · [ ] slower / faster · N now</span>
+          <span data-i18n="hToggles">Toggles</span><span data-i18n="hTogglesV">O orbits · L labels · C constellations · G grid · V scale</span>
+          <span data-i18n="hCamera">Camera</span><span data-i18n="hCameraV">1 free · 2 orbit · 3 follow · R reset · T tour</span>
+          <span data-i18n="hUI">UI</span><span data-i18n="hUIV">H hide · F3 stats · Esc cancel / close</span>
+          <span data-i18n="hShip">Ship</span><span data-i18n="hShipV">W A S D Q E thrust · Shift boost · wheel throttle · X match velocity · C circular orbit</span>
+          <span data-i18n="hScience">Science</span><span data-i18n="hScienceV">P physics · K star map · B database</span>
+        </div>
+      </div>
+
+      <div id="band-tag" class="band-tag" hidden></div>
+      <div id="sn-hud" class="sn-hud" hidden></div>
+      <div id="discovery" class="discovery"></div>
+      <div id="didyouknow" class="didyouknow"></div>
+      <div id="caption" class="caption"></div>
+      <div id="toast" class="toast"></div>
+      <div id="reticle" class="reticle"></div>
+      <div id="travel-vignette" class="travel-vignette"></div>
+    </div>
+
+    <!-- Intro -->
+    <div id="intro" class="intro">
+      <div class="intro-title">
+        <div class="intro-h1" data-i18n="introTitle">MILKY WAY</div>
+        <div class="intro-h2" data-i18n="introSub">Interactive Universe</div>
+      </div>
+      <div class="intro-hint" id="intro-hint" data-i18n="introHint">Click or press any key to begin</div>
+      <div class="intro-loading" id="intro-loading">
+        <div class="intro-bar"><div class="intro-bar-fill" id="intro-bar-fill"></div></div>
+        <div class="intro-status" id="intro-status" data-i18n="loading">Generating universe…</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

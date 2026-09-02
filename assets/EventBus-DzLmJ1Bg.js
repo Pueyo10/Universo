@@ -1,0 +1,1 @@
+var e=new class{constructor(){this._l=new Map}on(e,t){return this._l.has(e)||this._l.set(e,new Set),this._l.get(e).add(t),()=>this.off(e,t)}once(e,t){let n=this.on(e,(...e)=>{n(),t(...e)});return n}off(e,t){this._l.get(e)?.delete(t)}emit(e,...t){let n=this._l.get(e);if(n)for(let r of[...n])try{r(...t)}catch(t){console.error(`[event ${e}]`,t)}}};export{e as t};
