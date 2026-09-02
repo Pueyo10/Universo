@@ -4,6 +4,7 @@ import { Rng, hash3 } from '../core/Random.js';
 import { starColor } from './GalaxyModel.js';
 import { STARS, SPECIAL_STARS, PULSARS, STAR_DESCRIPTIONS } from '../data/StarCatalog.js';
 import { EXTRA_STARS } from '../data/Constellations.js';
+import { KNOWN_HOSTS, KNOWN_SYSTEMS } from '../data/Exoplanets.js';
 import { nearStarVert, nearStarFrag } from '../shaders/starShader.js';
 import { bus } from '../core/EventBus.js';
 import { i18n } from '../i18n/index.js';
@@ -42,7 +43,7 @@ export class StarFieldManager {
     this._jobId = 0;
     this._tmp = new THREE.Vector3();
     this.material = new THREE.ShaderMaterial({
-      uniforms: { uExposure: { value: 1 }, uPixelRatio: { value: 1 }, uMaxSize: { value: 26 }, uFade: { value: 1 }, uTime: { value: 0 }, uMinLum: { value: 0 } },
+      uniforms: { uExposure: { value: 1 }, uPixelRatio: { value: 1 }, uMaxSize: { value: 26 }, uFade: { value: 1 }, uTime: { value: 0 }, uMinLum: { value: 0 }, uBand: { value: 0 } },
       vertexShader: nearStarVert, fragmentShader: nearStarFrag,
       transparent: true, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending,
     });
@@ -127,6 +128,7 @@ export class StarFieldManager {
   // ---------------------------------------------------------------- catalogue
   _buildCatalog() {
     const list = [...STARS, ...EXTRA_STARS];
+    for (const h of KNOWN_HOSTS) if (!list.some(x => x[0] === h[0])) list.push(h);   // exoplanet hosts not in the bright-star catalogue
     const n = list.length;
     const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), lum = new Float32Array(n), seed = new Float32Array(n);
     const c = [0, 0, 0];
@@ -162,6 +164,7 @@ export class StarFieldManager {
       };
       // label visibility: brighter stars from farther away
       obj.maxLabelDistance = (mag < 1.5 ? 2500 : mag < 2.5 ? 900 : mag < 3.5 ? 300 : 60) * LY;
+      if (KNOWN_SYSTEMS[name]) { obj.knownSystem = KNOWN_SYSTEMS[name]; obj.priority = Math.max(obj.priority, 4); obj.maxLabelDistance = Math.max(obj.maxLabelDistance, 400 * LY); obj.data.planets = String(KNOWN_SYSTEMS[name].planets.length) + (i18n.lang === 'es' ? ' confirmados' : ' confirmed'); if (KNOWN_SYSTEMS[name].lum) obj.lum = KNOWN_SYSTEMS[name].lum; if (KNOWN_SYSTEMS[name].temp) obj.temp = KNOWN_SYSTEMS[name].temp; }
       this.catalog.push(obj);
       this.registry.add(obj);
     }

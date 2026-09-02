@@ -5,19 +5,24 @@ import { AU, LY, clamp, smoothstep, damp } from '../core/Units.js';
 // wind, a slow chord pad through generated reverb, and sparse pentatonic
 // pings. Layers cross-fade with context: the Sun, planets, deep space.
 export class AudioManager {
-  constructor(cameraCtl) {
-    this.cameraCtl = cameraCtl;
+  constructor(cameraCtl, universe = null) {
+    this.cameraCtl = cameraCtl; this.universe = universe;
     this.enabled = false; this.ctx = null; this.built = false;
-    this.mix = { drone: 0, wind: 0, pad: 0, pings: 0 };
-    this.target = { drone: 0.5, wind: 0.3, pad: 0.6, pings: 0.7 };
+    this.mix = { drone: 0, wind: 0, pad: 0, pings: 0, shimmer: 0, sub: 0 };
+    this.target = { drone: 0.5, wind: 0.3, pad: 0.6, pings: 0.7, shimmer: 0, sub: 0 };
     this._pingT = 4;
+    this.immersive = false;
+    this.masterLevel = 0.35;
     bus.on('toggle', (k, v) => { if (k === 'audio') this.setEnabled(v); });
+    bus.on('immersive', v => { this.immersive = v; if (this.master && this.enabled) this.master.gain.setTargetAtTime(v ? 0.5 : this.masterLevel, this.ctx.currentTime, 1.5); });
+    // sonification: a pulsar's beam sweeping past us -> a short radio "click" at its real spin period (clearly synthetic)
+    bus.on('pulsar:pulse', o => this.pulse(o));
   }
 
   setEnabled(v) {
     this.enabled = v;
     if (v) { this._ensure(); this.ctx?.resume(); }
-    if (this.master) this.master.gain.setTargetAtTime(v ? 0.35 : 0, this.ctx.currentTime, 0.5);
+    if (this.master) this.master.gain.setTargetAtTime(v ? (this.immersive ? 0.5 : this.masterLevel) : 0, this.ctx.currentTime, 0.5);
   }
 
   _ensure() {
@@ -57,6 +62,27 @@ export class AudioManager {
     padLp.connect(this.padGain); this.padGain.connect(conv); this.padGain.connect(this.master);
     const trem = ctx.createOscillator(); trem.frequency.value = 0.11; const tremG = ctx.createGain(); tremG.gain.value = 0.25; trem.connect(tremG); tremG.connect(this.padGain.gain); trem.start();
     this.pingGain = ctx.createGain(); this.pingGain.gain.value = 0; this.pingGain.connect(conv); this.pingGain.connect(this.master);
+    // shimmer: high airy partials for nebulae (filtered noise + slow chorus)
+    const sb = ctx.createBufferSource(); sb.buffer = nb; sb.loop = true;
+    const hp = ctx.createBiquadFilter(); hp.type = 'bandpass'; hp.frequency.value = 2400; hp.Q.value = 1.2;
+    this.shimmerGain = ctx.createGain(); this.shimmerGain.gain.value = 0;
+    sb.connect(hp); hp.connect(this.shimmerGain); this.shimmerGain.connect(conv); this.shimmerGain.connect(this.master); sb.start();
+    const sl = ctx.createOscillator(); sl.frequency.value = 0.09; const slG = ctx.createGain(); slG.gain.value = 900; sl.connect(slG); slG.connect(hp.frequency); sl.start();
+    // sub: very low pulsing tone for black holes
+    this.subGain = ctx.createGain(); this.subGain.gain.value = 0;
+    const sub = ctx.createOscillator(); sub.type = 'sine'; sub.frequency.value = 31; sub.connect(this.subGain); sub.start();
+    const subL = ctx.createOscillator(); subL.frequency.value = 0.17; const subLG = ctx.createGain(); subLG.gain.value = 0.5; subL.connect(subLG); subLG.connect(this.subGain.gain); subL.start();
+    this.subGain.connect(this.master);
+  }
+
+  /** Synthetic pulsar click (data-inspired sonification, not a recording). */
+  pulse(o) {
+    if (!this.enabled || !this.ctx || !this.built) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o1 = ctx.createOscillator(); o1.type = 'square'; o1.frequency.value = 180 + Math.min((o.spinHz || 1) * 3, 400);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1800;
+    o1.connect(f); f.connect(g); g.connect(this.master); o1.start(t); o1.stop(t + 0.1);
   }
 
   _ping() {
@@ -79,18 +105,30 @@ export class AudioManager {
     const nearPlanet = near.obj && (near.obj.kind === 'planet' || near.obj.kind === 'moon') && near.dist < near.obj.radius * 40;
     const deep = dSun > 5 * LY;
     const warp = cam.warp;
-    this.target.drone = nearSun ? 0.9 : deep ? 0.35 : 0.5;
-    this.target.wind = nearSun ? 0.6 : nearPlanet ? 0.35 : 0.15 + warp * 0.8;
-    this.target.pad = nearPlanet ? 0.8 : deep ? 0.55 : 0.45;
-    this.target.pings = deep ? 0.9 : nearPlanet ? 0.5 : 0.6;
+    // contexts: inside a nebula, near the black hole, near Earth (warmer), deep intergalactic space (near silence)
+    const u = this.universe;
+    const inNebula = !!(u && u.nebulae && u.nebulae.items.some(it => it.pos.distanceTo(cam.position) < it.R * 1.1));
+    const nearBH = !!(u && u.blackHole && cam.position.distanceTo(u.blackHole.pos) < u.blackHole.rs * 400);
+    const nearEarth = near.obj && near.obj.id === 'earth' && near.dist < near.obj.radius * 20;
+    const intergalactic = u && u.galaxy ? cam.position.distanceTo(u.galaxy.centerScene) > 150000 * LY : false;
+    const quiet = intergalactic ? 0.35 : 1;                               // vast emptiness: let silence speak
+    this.target.drone = (nearSun ? 0.9 : nearBH ? 0.7 : deep ? 0.3 : 0.5) * quiet;
+    this.target.wind = (nearSun ? 0.6 : nearPlanet ? 0.35 : inNebula ? 0.45 : 0.15 + warp * 0.8) * quiet;
+    this.target.pad = (nearEarth ? 0.95 : nearPlanet ? 0.8 : inNebula ? 0.7 : deep ? 0.5 : 0.45) * quiet;
+    this.target.pings = (nearBH ? 0.2 : deep ? 0.9 : nearPlanet ? 0.5 : 0.6) * quiet;
+    this.target.shimmer = inNebula ? 1 : 0;
+    this.target.sub = nearBH ? 1 : 0;
     for (const k of Object.keys(this.mix)) this.mix[k] = damp(this.mix[k], this.target[k], 0.8, dt);
     const t = this.ctx.currentTime;
     this.droneGain.gain.setTargetAtTime(this.mix.drone * 0.5, t, 0.3);
     this.windGain.gain.setTargetAtTime(this.mix.wind * 0.12, t, 0.3);
     this.padGain.gain.setTargetAtTime(this.mix.pad * 0.5, t, 0.3);
     this.pingGain.gain.setTargetAtTime(this.mix.pings * 0.8, t, 0.3);
-    this.droneFilter.frequency.setTargetAtTime(nearSun ? 320 : 180, t, 1.0);
+    this.shimmerGain.gain.setTargetAtTime(this.mix.shimmer * 0.06, t, 0.6);
+    this.subGain.gain.setTargetAtTime(this.mix.sub * 0.35, t, 0.6);
+    this.droneFilter.frequency.setTargetAtTime(nearSun ? 320 : nearBH ? 90 : 180, t, 1.0);
+    // pad brightness: warmer near Earth, colder in deep space
     this._pingT -= dt;
-    if (this._pingT <= 0) { this._ping(); this._pingT = 5 + Math.random() * 10; }
+    if (this._pingT <= 0) { this._ping(); this._pingT = (inNebula ? 3 : 5) + Math.random() * (intergalactic ? 25 : 10); }
   }
 }

@@ -23,6 +23,9 @@ const FinalShader = {
     uSunColor: { value: new THREE.Color(1.0, 0.93, 0.8) },
     uFade: { value: 1.0 },
     uSaturation: { value: 1.05 },
+    uBand: { value: 0 },
+    uHaze: { value: 0.0 },
+    uHazeColor: { value: new THREE.Color(0.6, 0.75, 1.0) },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -31,7 +34,8 @@ const FinalShader = {
   fragmentShader: /* glsl */`
     precision highp float;
     uniform sampler2D tDiffuse;
-    uniform float uExposure, uTime, uAspect, uVignette, uAberration, uGrain, uWarp, uLens, uSunVisible, uSunSize, uFade, uSaturation;
+    uniform float uExposure, uTime, uAspect, uVignette, uAberration, uGrain, uWarp, uLens, uSunVisible, uSunSize, uFade, uSaturation, uBand, uHaze;
+    uniform vec3 uHazeColor;
     uniform vec2 uResolution, uWarpCenter, uSunScreen;
     uniform vec3 uSunColor;
     varying vec2 vUv;
@@ -116,8 +120,16 @@ const FinalShader = {
       }
 
       col *= uExposure;
+      // atmospheric entry haze: scattered light fills the frame as the camera descends
+      if (uHaze > 0.001) col = mix(col, uHazeColor * (0.6 + 0.4 * uExposure), uHaze);
 
       if (uLens > 0.5 && uSunVisible > 0.001) col += flare(uv) * uSunVisible * uExposure;
+      // observatory false colour: keep structure, tint by band, boost contrast so faint emission reads
+      if (uBand > 0.5) {
+        float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        vec3 tint = uBand < 1.5 ? vec3(1.0, 0.55, 0.3) : uBand < 2.5 ? vec3(0.55, 0.65, 1.0) : uBand < 3.5 ? vec3(0.75, 0.6, 1.0) : vec3(0.55, 1.0, 0.7);
+        col = mix(col, tint * l, 0.55) * (uBand < 3.5 && uBand > 2.5 ? 1.8 : 1.25);
+      }
 
       // tone map
       col = aces(col);

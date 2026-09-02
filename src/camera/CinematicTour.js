@@ -1,72 +1,84 @@
-import * as THREE from 'three';
 import { bus } from '../core/EventBus.js';
 import { CAM_MODE } from './CameraController.js';
 import { i18n, t } from '../i18n/index.js';
+import { TOURS, observeSteps } from './Tours.js';
+import { clamp, damp } from '../core/Units.js';
 
-// The "Cinematic Tour": a scripted flight through the scales of the universe
-// with captions, slow orbital drifts at each stop, and time acceleration so
-// worlds visibly turn. Escape or the tour button ends it.
-const STEPS = [
-  { id: 'milkyway', dist: 3.2, dwell: 9, orbit: 0.06, cap: 'milkyway1', duration: 9 },
-  { id: 'arm-4', dist: 3.5, dwell: 6, orbit: 0.05, cap: 'spur', duration: 8 },
-  { id: 'sun', dist: 9, dwell: 8, orbit: 0.08, cap: 'sun', duration: 9 },
-  { id: 'mercury', dist: 4.5, dwell: 4, orbit: 0.12, cap: 'mercury', duration: 6 },
-  { id: 'venus', dist: 4.5, dwell: 4, orbit: 0.10, cap: 'venus', duration: 6 },
-  { id: 'mars', dist: 4.5, dwell: 5, orbit: 0.10, cap: 'mars', duration: 6 },
-  { id: 'jupiter', dist: 5.5, dwell: 9, orbit: 0.07, cap: 'jupiter', duration: 7 },
-  { id: 'io', dist: 5, dwell: 4, orbit: 0.12, cap: 'io', duration: 5 },
-  { id: 'saturn', dist: 6.5, dwell: 10, orbit: 0.06, cap: 'saturn', duration: 7 },
-  { id: 'titan', dist: 4.5, dwell: 4, orbit: 0.12, cap: 'titan', duration: 5 },
-  { id: 'earth', dist: 4.2, dwell: 10, orbit: 0.06, cap: 'earth', duration: 8 },
-  { id: 'moon', dist: 4.5, dwell: 5, orbit: 0.1, cap: 'moon', duration: 5 },
-  { id: 'sgr-a', dist: 24, dwell: 9, orbit: 0.05, cap: 'sgra', duration: 12 },
-  { id: 'milkyway', dist: 3.6, dwell: 7, orbit: 0.05, cap: 'milkyway2', duration: 10 },
-];
-
+// Guided tours and the OBSERVE auto-cinematic: scripted flights through the
+// scales of the universe with documentary captions, slow orbital drifts with
+// elevation changes at each stop, and time acceleration so worlds visibly turn.
+// Escape, the tour button or any travel request ends the sequence.
 export class CinematicTour {
   constructor({ engine, registry, cameraCtl, ui, time }) {
     this.engine = engine; this.registry = registry; this.cameraCtl = cameraCtl; this.ui = ui; this.time = time;
     this.active = false; this.step = -1; this.phase = 'idle'; this.t = 0;
+    this.steps = []; this.tourId = null; this.observing = false;
     this.sys = { update: (dt) => this.update(dt) };
-    bus.on('tour:toggle', () => this.active ? this.stop(t('tTourEnd')) : this.start());
+    bus.on('tour:toggle', () => this.active ? this.stop(t('tTourEnd')) : bus.emit('tour:menu'));
+    bus.on('tour:start', id => this.start(id));
+    bus.on('observe', o => this.observe(o));
     bus.on('escape', () => { if (this.active) this.stop(t('tTourEnd')); });
     bus.on('camera:travel:cancel', () => { if (this.active) this.stop(t('tTourEnd')); });
   }
 
-  start() {
-    if (this.active) return;
+  get tours() { return TOURS; }
+
+  start(id = 'solar') {
+    const tour = TOURS[id]; if (!tour) return;
+    this.observing = false;
+    this._begin(tour.steps, id, tour.speed ?? 600);
+    this.ui.toast(`${tour.name[i18n.lang] || tour.name.en}`, 3000);
+  }
+
+  /** OBSERVE: a 25-second automatic sequence around one object. */
+  observe(o) {
+    if (!o || !o.getPosition) return;
+    this.observing = true;
+    this._begin(observeSteps(o, i18n.lang), 'observe', Math.max(this.time.effectiveSpeed, o.kind === 'planet' || o.kind === 'moon' ? 200 : 1));
+  }
+
+  _begin(steps, id, speed) {
+    if (this.active) this._end();
+    this.steps = steps; this.tourId = id;
     this.active = true; this.step = -1; this.phase = 'travel';
     this.prevSpeed = this.time.effectiveSpeed;
-    this.time.setSpeed(600);
+    this.prevHz = this.ui.state.habitable;
+    this.time.setSpeed(speed);
     this.cameraCtl.inputEnabled = false;
     document.getElementById('btn-tour').classList.add('active');
     this.engine.addSystem(this.sys);
-    this.ui.toast(t('tTourStart'), 3000);
+    bus.emit('tour:begin', id);
     this._next();
   }
 
-  stop(msg) {
-    if (!this.active) return;
+  _end() {
     this.active = false; this.phase = 'idle';
     const i = this.engine.systems.indexOf(this.sys); if (i >= 0) this.engine.systems.splice(i, 1);
     this.cameraCtl.inputEnabled = true;
     if (this.cameraCtl.travel) { this.cameraCtl.travel.onArrive = null; }
     this.time.setSpeed(this.prevSpeed || 1);
+    if (this._hzTurnedOn && !this.prevHz) { bus.emit('toggle', 'habitable', false); this._hzTurnedOn = false; }
     document.getElementById('btn-tour').classList.remove('active');
     this.ui.caption(null);
-    if (msg) this.ui.toast(msg);
     bus.emit('tour:end');
+  }
+
+  stop(msg) {
+    if (!this.active) return;
+    this._end();
+    if (msg) this.ui.toast(msg);
   }
 
   _next() {
     this.step++;
-    if (this.step >= STEPS.length) { this.stop(t('tTourDone')); return; }
-    const s = STEPS[this.step];
+    if (this.step >= this.steps.length) { this._end(); this.ui.toast(t(this.observing ? 'tObserveDone' : 'tTourDone')); return; }
+    const s = this.steps[this.step];
     const obj = this.registry.get(s.id);
     if (!obj) { this._next(); return; }
     this.current = s;
     this.phase = 'travel';
     this.ui.caption(null);
+    if (s.hz && !this.ui.state.habitable) { bus.emit('toggle', 'habitable', true); this._hzTurnedOn = true; }
     bus.emit('select:request', obj);
     this.cameraCtl.travelTo(obj, { distance: s.dist, duration: s.duration, mode: CAM_MODE.ORBIT, onArrive: () => this._arrived() });
   }
@@ -75,19 +87,25 @@ export class CinematicTour {
     if (!this.active) return;
     this.phase = 'dwell'; this.t = 0;
     const s = this.current;
-    const cap = t('tourSteps')[s.cap] || [i18n.name(this.registry.get(s.id)), ''];
-    this.ui.caption(cap[0], cap[1]);
+    const cap = s.cap ? (s.cap[i18n.lang] || s.cap.en) : null;
+    if (cap && (cap[0] || cap[1])) this.ui.caption(cap[0], cap[1]);
+    // realistic flight would drift away from the scripted view: park the camera in orbit mode for the sequence
+    if (this.cameraCtl.mode === CAM_MODE.SHIP) { this.cameraCtl.mode = CAM_MODE.ORBIT; this.cameraCtl.setMode(CAM_MODE.ORBIT, this.registry.get(s.id)); }
+    this._phiTarget = s.phi != null ? s.phi : this.cameraCtl.orbit.phi;
   }
 
   update(dt) {
     if (!this.active) return;
     if (this.phase === 'dwell') {
       this.t += dt;
-      // gentle orbital drift
-      const o = this.cameraCtl.orbit;
-      o.theta += this.current.orbit * dt;
-      o.phi += Math.sin(this.t * 0.4) * 0.01 * dt;
-      if (this.t > this.current.dwell) this._next();
+      const o = this.cameraCtl.orbit, s = this.current;
+      // gentle drift: azimuth at the step's rate, elevation eased toward the target with a slow breathing motion
+      o.theta += s.orbit * dt;
+      const breathe = Math.sin(this.t * 0.35) * (s.elevate || 0.06);
+      o.phi = damp(o.phi, clamp(this._phiTarget + breathe, -1.3, 1.3), 1.2, dt);
+      // slow dolly in during the dwell (5 % over the stop) for a cinematic feel
+      o.distTarget *= Math.exp(-0.006 * dt);
+      if (this.t > s.dwell) this._next();
     }
   }
 }

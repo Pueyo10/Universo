@@ -29,6 +29,8 @@ export class Body {
     this.realPosition = new THREE.Vector3();
     this.visualPosition = new THREE.Vector3();
     this.quaternion = new THREE.Quaternion();
+    this.velocity = new THREE.Vector3();          // scene units per simulated second (finite difference)
+    this._prevPos = new THREE.Vector3(); this._prevSimMs = null;
     this.pole = new THREE.Vector3(0, 1, 0);
     this.orbitNormal = new THREE.Vector3(0, 1, 0);
     this.group = new THREE.Group();
@@ -110,6 +112,23 @@ export class Body {
     }
     // ---- orientation
     this._updateOrientation(days);
+    this.trackVelocity(simMs);
+    this.syncGroup();
+  }
+
+  /** Finite-difference velocity in scene units per simulated second (kept across pauses). */
+  trackVelocity(simMs) {
+    if (this._prevSimMs != null) {
+      const dtS = (simMs - this._prevSimMs) / 1000;
+      if (Math.abs(dtS) > 1e-6) this.velocity.copy(this.position).sub(this._prevPos).multiplyScalar(1 / dtS);
+    }
+    this._prevPos.copy(this.position); this._prevSimMs = simMs;
+  }
+  getVelocity(out) { return out.copy(this.velocity); }
+
+  /** Push position / orientation / scale into the Three group (float64 -> matrices). */
+  syncGroup() {
+    const d = this.def;
     this.group.position.copy(this.position);
     this.group.quaternion.copy(this.quaternion);
     this.group.scale.setScalar(this.radius);

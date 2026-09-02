@@ -8,7 +8,7 @@ import { i18n } from '../i18n/index.js';
 const DEFAULT_RANGE = {
   sun: [1.5, 3e6], star: [2, 5e5], planet: [1.2, 2.5e6], dwarf: [1.2, 4e5], moon: [1.2, 900],
   asteroid: [1.5, 3e4], comet: [1.5, 2e6], spacecraft: [2, 2e6], nebula: [1.05, 4000], blackhole: [1.2, 1e12],
-  galaxy: [2.2, 400], region: [2, 60], cluster: [1.5, 3000],
+  galaxy: [2.2, 400], region: [2, 60], cluster: [1.5, 3000], site: [0, 1e9],
 };
 
 export class LabelSystem {

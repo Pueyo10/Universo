@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { bus } from '../core/EventBus.js';
 import { clamp, damp, lerp, smoothstep, LY, AU } from '../core/Units.js';
+import { ShipPhysics } from '../physics/ShipPhysics.js';
 
-export const CAM_MODE = { FREE: 'FREE', ORBIT: 'ORBIT', FOLLOW: 'FOLLOW', TRAVEL: 'TRAVEL', CINEMATIC: 'CINEMATIC' };
+export const CAM_MODE = { FREE: 'FREE', SHIP: 'SHIP', ORBIT: 'ORBIT', FOLLOW: 'FOLLOW', TRAVEL: 'TRAVEL', CINEMATIC: 'CINEMATIC' };
 
 const easeInOut = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
@@ -10,12 +11,17 @@ const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 // Camera controller with free flight, orbit, follow (orbital-frame chase),
 // scale-aware speeds and cinematic travel in log-distance space.
 export class CameraController {
-  constructor(engine, registry, canvas) {
+  constructor(engine, registry, canvas, time = null) {
     this.engine = engine;
     this.camera = engine.camera;
     this.registry = registry;
     this.canvas = canvas;
+    this.time = time;
     this.mode = CAM_MODE.FREE;
+    // REALISTIC FLIGHT PHYSICS: a ship with inertia, thrust and real gravity (see physics/ShipPhysics)
+    this.ship = time ? new ShipPhysics(registry, time) : null;
+    this.flightRealistic = false;        // when true, "free" flight means the ship
+    this.roll = 0;                       // camera roll (photo mode / cinematic)
     this.position = new THREE.Vector3(0, 0, 0);          // float64 world position
     this.quaternion = new THREE.Quaternion();
     this.yaw = 0; this.pitch = 0;                          // free-look
@@ -83,7 +89,7 @@ export class CameraController {
   _look(dx, dy) {
     const s = 0.0022 * this.sensitivity;
     const iy = this.invertY ? -1 : 1;
-    if (this.mode === CAM_MODE.FREE) {
+    if (this.mode === CAM_MODE.FREE || this.mode === CAM_MODE.SHIP) {
       this.yaw -= dx * s; this.pitch -= dy * s * iy;
       this.pitch = clamp(this.pitch, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
     } else if (this.mode === CAM_MODE.ORBIT || this.mode === CAM_MODE.FOLLOW) {
@@ -99,6 +105,9 @@ export class CameraController {
     const prev = this.mode;
     if (target) this.target = target;
     if ((mode === CAM_MODE.ORBIT || mode === CAM_MODE.FOLLOW) && !this.target) mode = CAM_MODE.FREE;
+    if (mode === CAM_MODE.FREE && this.flightRealistic && this.ship) mode = CAM_MODE.SHIP;
+    if (mode === CAM_MODE.SHIP && !this.ship) mode = CAM_MODE.FREE;
+    if (mode === CAM_MODE.SHIP && prev !== CAM_MODE.SHIP) this._enterShip(prev);
     this.mode = mode;
     if (mode === CAM_MODE.ORBIT || mode === CAM_MODE.FOLLOW) {
       // derive orbit params from current pose
@@ -111,10 +120,32 @@ export class CameraController {
       this.orbit.theta = Math.atan2(local.x, local.z);
       this.orbit.phi = Math.asin(clamp(local.y / d, -1, 1));
       this.orbit.thetaV = 0; this.orbit.phiV = 0;
-    } else if (mode === CAM_MODE.FREE) {
+    } else if (mode === CAM_MODE.FREE || mode === CAM_MODE.SHIP) {
       this._syncYawPitchFromQuat();
     }
     if (prev !== mode) bus.emit('camera:mode', mode);
+  }
+
+  /** Switch flight model. Realistic: inertia + gravity; exploration: damped free camera. */
+  setFlightRealistic(v) {
+    this.flightRealistic = !!v;
+    if (v && (this.mode === CAM_MODE.FREE || this.mode === CAM_MODE.ORBIT || this.mode === CAM_MODE.FOLLOW)) this.setMode(CAM_MODE.SHIP, this.target);
+    else if (this.mode === CAM_MODE.SHIP && !v) { this.mode = CAM_MODE.FREE; this.velocity.set(0, 0, 0); bus.emit('camera:mode', this.mode); }
+    bus.emit('flight:mode', this.flightRealistic);
+  }
+
+  /** Entering ship mode: start co-moving with the body we are closest to (or orbiting), so nothing lurches. */
+  _enterShip(prev) {
+    const sh = this.ship;
+    sh.attractors(this.position); sh.accel(this.position, sh.gravity, true);
+    const ref = (prev === CAM_MODE.ORBIT || prev === CAM_MODE.FOLLOW) && this.target ? this.target : (sh.dominant || this.nearest.obj);
+    if (ref && ref.gm) {
+      // if we were orbiting a body at a sensible distance, insert into a circular orbit; otherwise just co-move
+      const d = ref.getPosition(this._tmp).distanceTo(this.position);
+      if ((prev === CAM_MODE.ORBIT || prev === CAM_MODE.FOLLOW) && d < (ref.radius || 0) * 200) sh.circularize(this.position, ref);
+      else sh.matchVelocity(ref);
+    } else sh.velocity.set(0, 0, 0);
+    sh.thrust.set(0, 0, 0);
   }
 
   _syncYawPitchFromQuat() {
@@ -241,7 +272,11 @@ export class CameraController {
       const { obj, onArrive, endMode } = tr;
       this.travel = null;
       this.warp = 0;
-      this.setMode(endMode, obj);
+      if (this.flightRealistic && this.ship && (endMode === CAM_MODE.ORBIT || endMode === CAM_MODE.FREE)) {
+        // realistic flight: arrive in a real orbit around the destination (or co-moving if it has no mass)
+        this.mode = CAM_MODE.ORBIT; this.target = obj;
+        this.setMode(CAM_MODE.SHIP, obj);
+      } else this.setMode(endMode, obj);
       bus.emit('camera:arrive', obj);
       if (onArrive) onArrive();
     }
@@ -263,6 +298,10 @@ export class CameraController {
       this._updateFree(dt);
       this.warp = damp(this.warp, 0, 5, dt);
       this.fovMul = damp(this.fovMul, 1, 5, dt);
+    } else if (this.mode === CAM_MODE.SHIP) {
+      this._updateShip(dt);
+      this.warp = damp(this.warp, 0, 5, dt);
+      this.fovMul = damp(this.fovMul, 1, 5, dt);
     } else if (this.mode === CAM_MODE.ORBIT || this.mode === CAM_MODE.FOLLOW) {
       this._updateOrbit(dt);
       this.warp = damp(this.warp, 0, 5, dt);
@@ -274,6 +313,7 @@ export class CameraController {
     this.wheelAccum = 0;
     this.camera.position.copy(this.position);
     this.camera.quaternion.copy(this.quaternion);
+    if (this.roll) this.camera.quaternion.multiply(this._q2.setFromAxisAngle(this._tmp.set(0, 0, 1), this.roll));
     this.camera.updateMatrixWorld(true);
     this.engine.fovMultiplier = this.fovMul;
     this.currentSpeed = this.position.distanceTo(this._lastPos) / Math.max(dt, 1e-4);
@@ -318,6 +358,30 @@ export class CameraController {
     this.position.addScaledVector(this.velocity, dt);
     // keep out of bodies
     this._collide();
+  }
+
+  /** Realistic flight: thrusters + gravity integrated against simulated time. */
+  _updateShip(dt) {
+    const sh = this.ship;
+    this.quaternion.setFromEuler(new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ'));
+    const k = this.keys;
+    const th = sh.thrust.set(0, 0, 0);
+    if (k.has('KeyW') || k.has('ArrowUp')) th.z -= 1;
+    if (k.has('KeyS') || k.has('ArrowDown')) th.z += 1;
+    if (k.has('KeyA') || k.has('ArrowLeft')) th.x -= 1;
+    if (k.has('KeyD') || k.has('ArrowRight')) th.x += 1;
+    if (k.has('KeyE')) th.y += 1;
+    if (k.has('KeyQ')) th.y -= 1;
+    if (th.lengthSq() > 0) th.normalize();
+    sh.boost = (k.has('ShiftLeft') || k.has('ShiftRight')) ? 10 : (k.has('ControlLeft') || k.has('ControlRight')) ? 0.1 : 1;
+    // wheel: throttle (thrust acceleration) in log steps, 0.1 m/s² … 1000 m/s²
+    if (this.wheelAccum !== 0) { sh.thrustAccel = clamp(sh.thrustAccel * Math.exp(-this.wheelAccum * 0.25), 0.1, 1000); bus.emit('ship:throttle', sh.thrustAccel); }
+    // X: kill relative velocity (match the dominant body) · C: circular orbit around it
+    if (k.has('KeyX') && sh.dominant) sh.matchVelocity(sh.dominant);
+    if (k.has('KeyC') && sh.dominant && !this._circ) { this._circ = true; sh.circularize(this.position, sh.dominant); bus.emit('ship:circularized', sh.dominant); }
+    if (!k.has('KeyC')) this._circ = false;
+    sh.step(this.position, this.quaternion, dt);
+    this.velocity.copy(sh.velocity);
   }
 
   _collide() {

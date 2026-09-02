@@ -35,6 +35,7 @@ export class BackgroundSky {
         uTiers: { value: engine.q.skyTiers },
         uGalaxyTiers: { value: engine.q.skyGalaxies },
         uSmooth: { value: this.smoothMap },
+        uBand: { value: 0 },
       },
       vertexShader: /* glsl */`
         varying vec3 vDir;
@@ -46,7 +47,7 @@ export class BackgroundSky {
       `,
       fragmentShader: /* glsl */`
         precision highp float;
-        uniform float uTime, uPixelAngle, uIntensity, uDensity, uGalaxyFade, uTiers, uGalaxyTiers;
+        uniform float uTime, uPixelAngle, uIntensity, uDensity, uGalaxyFade, uTiers, uGalaxyTiers, uBand;
         uniform mat3 uGalInv;
         uniform samplerCube uSmooth;
         varying vec3 vDir;
@@ -121,6 +122,13 @@ export class BackgroundSky {
           nebCol = mix(nebCol, vec3(0.55, 0.35, 0.25), plane * 0.7);
           col += nebCol * neb * 0.025 * (0.5 + plane);
           col *= 1.0 - 0.5 * plane * dust;
+          if (uBand > 0.5) {
+            float l = dot(col, vec3(0.3, 0.5, 0.2));
+            if (uBand < 1.5) col = vec3(1.0, 0.5, 0.22) * l * 0.8 + vec3(1.0, 0.45, 0.15) * dust * plane * 0.12;   // infrared: dust glows
+            else if (uBand < 2.5) col = vec3(0.5, 0.6, 1.0) * l * 0.6;
+            else if (uBand < 3.5) col = vec3(0.7, 0.55, 1.0) * l * 0.15;
+            else col = vec3(0.45, 1.0, 0.6) * l * 0.4 + vec3(0.3, 0.9, 0.5) * plane * 0.05;                       // radio: the plane glows
+          }
 
           gl_FragColor = vec4(col * uIntensity, 1.0);
         }

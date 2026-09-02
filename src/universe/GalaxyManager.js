@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { LY, GALAXY_MATRIX, SUN_GAL_POS, GC_DISTANCE_LY, sceneToGal, GAL_EW } from '../core/Units.js';
 import { Rng } from '../core/Random.js';
 import { sampleGalaxyStars, sampleArmSprites, GALAXY } from './GalaxyModel.js';
-import { LOGDEPTH_PARS_VERT, LOGDEPTH_VERT, LOGDEPTH_PARS_FRAG, LOGDEPTH_FRAG, HASH } from '../shaders/chunks.js';
+import { LOGDEPTH_PARS_VERT, LOGDEPTH_VERT, LOGDEPTH_PARS_FRAG, LOGDEPTH_FRAG, HASH, BAND_UTILS } from '../shaders/chunks.js';
 
 // The galaxy-wide representation of the Milky Way: hundreds of thousands of
 // luminosity-weighted star points, diffuse unresolved starlight billboards,
@@ -16,12 +16,13 @@ const starVert = /* glsl */`
   attribute vec3 color;
   varying vec3 vColor;
   varying float vAlpha;
-  uniform float uExposure, uPixelRatio, uMaxSize, uFade, uTime;
+  uniform float uExposure, uPixelRatio, uMaxSize, uFade, uTime, uBand;
   ${LOGDEPTH_PARS_VERT}
+  ${BAND_UTILS}
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     float dLy = length(mv.xyz) / ${LY.toExponential(6)};   // distance in ly
-    float flux = lum / max(dLy * dLy, 1e-6);                // L☉ / ly²
+    float flux = lum / max(dLy * dLy, 1e-6) * bandStarWeight(color, uBand);   // L☉ / ly²
     // reference: an L=1000 star seen from 150 kly renders at ~0.55 alpha
     float b = pow(flux * uExposure / 2.2e-6, 0.55);
     float alpha = clamp(b, 0.0, 0.55);
@@ -29,7 +30,7 @@ const starVert = /* glsl */`
     size = min(size, uMaxSize);
     // tiny sub-pixel twinkle for the brightest only
     alpha *= 0.94 + 0.06 * sin(uTime * 3.0 + position.x * 0.37 + position.y * 0.11);
-    vColor = color;
+    vColor = bandStarTint(color, uBand);
     vAlpha = alpha * uFade;
     gl_PointSize = size * uPixelRatio;
     if (alpha < 0.01) gl_PointSize = 0.0;
@@ -64,7 +65,7 @@ const spriteVert = /* glsl */`
   attribute float iRot;
   attribute float iSeed;
   uniform vec3 uCamRight, uCamUp, uCamPosModel;
-  uniform float uFade, uNearFade, uInside;
+  uniform float uFade, uNearFade, uInside, uBand, uKind;   // uKind: 0 glow · 1 dust · 2 HII
   varying vec2 vUv;
   varying vec3 vColor;
   varying float vAlpha, vSeed;
@@ -79,6 +80,10 @@ const spriteVert = /* glsl */`
     vUv = position.xy;
     vColor = iColor;
     vAlpha = iAlpha * uFade * mix(1.0, nf, uNearFade) * uInside;
+    // multiwavelength: glow dims in UV/X-ray/radio; HII bright in UV & radio, gone in X-ray; dust handled in its fragment
+    if (uBand > 0.5 && uKind < 0.5) vAlpha *= uBand < 1.5 ? 0.9 : uBand < 2.5 ? 0.25 : uBand < 3.5 ? 0.04 : 0.6;
+    if (uBand > 0.5 && uKind > 1.5) vAlpha *= uBand < 1.5 ? 0.6 : uBand < 2.5 ? 1.8 : uBand < 3.5 ? 0.1 : 2.2;
+    if (uBand > 0.5 && uKind > 0.5 && uKind < 1.5) vAlpha *= uBand < 1.5 ? 1.2 : uBand < 2.5 ? 1.3 : uBand < 3.5 ? 0.0 : 0.9;
     vSeed = iSeed;
     // sprites faded to (near) nothing are collapsed off-screen so they cost no fill at all
     if (vAlpha < 0.004) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
@@ -90,7 +95,7 @@ const spriteVert = /* glsl */`
 const glowFrag = /* glsl */`
   precision highp float;
   varying vec2 vUv; varying vec3 vColor; varying float vAlpha, vSeed;
-  uniform float uSoft;
+  uniform float uSoft, uBand;
   ${HASH}
   ${LOGDEPTH_PARS_FRAG}
   void main() {
@@ -103,12 +108,15 @@ const glowFrag = /* glsl */`
     float f = exp(-r2 * (2.2 + uSoft)) * lobes * (1.0 - r2);
     float a = f * vAlpha;
     if (a < 0.002) discard;
-    gl_FragColor = vec4(vColor * a, a);
+    vec3 col = vColor;
+    if (uBand > 0.5) col = uBand < 1.5 ? mix(col, vec3(1.0, 0.5, 0.25), 0.7) : uBand < 2.5 ? mix(col, vec3(0.5, 0.6, 1.0), 0.8) : uBand < 3.5 ? mix(col, vec3(0.7, 0.55, 1.0), 0.8) : mix(col, vec3(0.5, 1.0, 0.65), 0.8);
+    gl_FragColor = vec4(col * a, a);
   }
 `;
 const dustFrag = /* glsl */`
   precision highp float;
   varying vec2 vUv; varying vec3 vColor; varying float vAlpha, vSeed;
+  uniform float uBand;
   ${HASH}
   ${LOGDEPTH_PARS_FRAG}
   void main() {
@@ -120,6 +128,12 @@ const dustFrag = /* glsl */`
     float f = exp(-r2 * 2.6) * lobes * (1.0 - r2);
     float a = clamp(f * vAlpha, 0.0, 1.0);
     if (a < 0.003) discard;   // multiplying by ~1 changes nothing: skip the blend
+    if (uBand > 0.5 && (uBand < 1.5 || uBand > 3.5)) {
+      // infrared / radio: cold dust EMITS (thermal glow / synchrotron & molecular lines) — additive blending
+      vec3 em = uBand < 1.5 ? vec3(1.0, 0.45, 0.18) : vec3(0.35, 0.9, 0.55);
+      gl_FragColor = vec4(em * a * 0.8, a);
+      return;
+    }
     // multiply blending: output mix(1, tint, a)
     gl_FragColor = vec4(mix(vec3(1.0), vColor, a), 1.0);
   }
@@ -186,7 +200,7 @@ export class GalaxyManager {
     geo.setAttribute('lum', new THREE.BufferAttribute(lum, 1));
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 100000);
     this.starMaterial = new THREE.ShaderMaterial({
-      uniforms: { uExposure: { value: 1 }, uPixelRatio: { value: this.engine.q.pixelRatio }, uMaxSize: { value: 9 }, uFade: { value: 1 }, uTime: { value: 0 } },
+      uniforms: { uExposure: { value: 1 }, uPixelRatio: { value: this.engine.q.pixelRatio }, uMaxSize: { value: 9 }, uFade: { value: 1 }, uTime: { value: 0 }, uBand: { value: 0 } },
       vertexShader: starVert, fragmentShader: starFrag,
       transparent: true, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending,
     });
@@ -211,7 +225,7 @@ export class GalaxyManager {
     const mat = new THREE.ShaderMaterial({
       uniforms: {
         uCamRight: { value: new THREE.Vector3(1, 0, 0) }, uCamUp: { value: new THREE.Vector3(0, 1, 0) }, uCamPosModel: { value: new THREE.Vector3() },
-        uFade: { value: 1 }, uNearFade: { value: extra.nearFade ?? 1 }, uSoft: { value: extra.soft ?? 0 }, uInside: { value: 1 },
+        uFade: { value: 1 }, uNearFade: { value: extra.nearFade ?? 1 }, uSoft: { value: extra.soft ?? 0 }, uInside: { value: 1 }, uBand: { value: 0 }, uKind: { value: blending === THREE.MultiplyBlending ? 1 : (extra.hii ? 2 : 0) },
       },
       vertexShader: spriteVert, fragmentShader: frag,
       transparent: true, depthWrite: false, depthTest: true, blending, side: THREE.DoubleSide,
@@ -314,7 +328,7 @@ export class GalaxyManager {
         A[i] = big ? 0.3 + 0.3 * rng.float() : 0.45 + 0.45 * rng.float();
         R[i] = rng.float() * Math.PI * 2; SD[i] = rng.float();
       }
-    }, THREE.AdditiveBlending, glowFrag, 30, { soft: 0.0, insideFactor: 0.45 });
+    }, THREE.AdditiveBlending, glowFrag, 30, { soft: 0.0, insideFactor: 0.45, hii: true });
   }
 
   _buildCore() {

@@ -27,6 +27,10 @@ export const PLANET_ELEMENTS = {
   makemake: { a: 45.43, e: 0.161, I: 29.0, L: 14.4 + 155, wbar: 14.4, O: 79.6, da: 0, de: 0, dI: 0, dL: 36000 / 306, dwbar: 0, dO: 0 },
   haumea: { a: 43.1, e: 0.195, I: 28.2, L: 1.2 + 205, wbar: 1.2, O: 122.2, da: 0, de: 0, dI: 0, dL: 36000 / 283, dwbar: 0, dO: 0 },
   sedna: { a: 506, e: 0.855, I: 11.93, L: 95.8 + 356.8, wbar: 95.8, O: 144.5, da: 0, de: 0, dI: 0, dL: 36000 / 11400, dwbar: 0, dO: 0 },
+  vesta: { a: 2.3615, e: 0.0887, I: 7.142, L: 151.2 + 20.0, wbar: 151.2, O: 103.8, da: 0, de: 0, dI: 0, dL: 36000 / 3.63, dwbar: 0, dO: 0 },
+  pallas: { a: 2.7726, e: 0.2305, I: 34.84, L: 310.0 + 78.2, wbar: 310.0, O: 173.1, da: 0, de: 0, dI: 0, dL: 36000 / 4.62, dwbar: 0, dO: 0 },
+  eros: { a: 1.4579, e: 0.2227, I: 10.83, L: 178.9 + 300.0, wbar: 178.9 + 304.3, O: 304.3, da: 0, de: 0, dI: 0, dL: 36000 / 1.76, dwbar: 0, dO: 0 },
+  bennu: { a: 1.1264, e: 0.2037, I: 6.035, L: 66.2 + 2.06 + 100.0, wbar: 66.2 + 2.06, O: 2.06, da: 0, de: 0, dI: 0, dL: 36000 / 1.196, dwbar: 0, dO: 0 },
   arrokoth: { a: 44.58, e: 0.042, I: 2.45, L: 340.5 + 316, wbar: 340.5, O: 158.9, da: 0, de: 0, dI: 0, dL: 36000 / 298, dwbar: 0, dO: 0 },
 };
 
@@ -75,7 +79,7 @@ export const PLANETS = [
     facts: ['The brightest natural object in Earth\'s night sky after the Moon.', 'More than 1,600 major volcanoes dot its surface.', 'Soviet Venera landers survived only about two hours on the surface.'],
   },
   {
-    id: 'earth', name: 'Earth', kind: 'planet', color: '#6fa8ff', radiusKm: 6371.0, massKg: 5.9722e24, elements: 'earth', rotation: 'earth',
+    id: 'earth', name: 'Earth', kind: 'planet', color: '#6fa8ff', radiusKm: 6371.0, massKg: 5.9722e24, elements: 'earth', rotation: 'earth', barycenter: true,
     texture: T('2k_earth_daymap.jpg'), nightTexture: T('2k_earth_nightmap.jpg'), cloudTexture: T('2k_earth_clouds.jpg'), normalTexture: T('2k_earth_normal_map.png'), specularTexture: T('2k_earth_specular_map.jpg'),
     type: 'earth', atmosphere: { color: [0.35, 0.55, 1.0], height: 0.02, density: 1.35, mie: 0.6, rayleigh: [0.19, 0.45, 1.0], cloudRotationD: 20 },
     subtitle: 'Third planet · the only known home of life',
@@ -135,7 +139,7 @@ export const PLANETS = [
 
 export const DWARF_PLANETS = [
   {
-    id: 'pluto', name: 'Pluto', kind: 'dwarf', kindLabel: 'Dwarf planet', color: '#d8c4b0', radiusKm: 1188.3, massKg: 1.303e22, elements: 'pluto', rotation: 'pluto',
+    id: 'pluto', name: 'Pluto', kind: 'dwarf', kindLabel: 'Dwarf planet', color: '#d8c4b0', radiusKm: 1188.3, massKg: 1.303e22, elements: 'pluto', rotation: 'pluto', barycenter: true,
     procedural: 'pluto', type: 'rocky', atmosphere: { color: [0.6, 0.7, 0.9], height: 0.06, density: 0.05, mie: 0.4, rayleigh: [0.4, 0.6, 1.0] },
     subtitle: 'Dwarf planet · king of the Kuiper Belt',
     data: { type: 'Dwarf planet (plutoid)', radius: '1,188 km (0.19 × Earth)', mass: '1.30 × 10²² kg', semiMajorAxis: '39.48 AU', orbitalPeriod: '248 years', rotationPeriod: '6.39 days (retrograde)', gravity: '0.62 m/s²', meanTemp: '−229 °C', axialTilt: '122.5°', moons: '5 (Charon, Styx, Nix, Kerberos, Hydra)', discovered: '1930 by Clyde Tombaugh' },
@@ -185,6 +189,20 @@ export const DWARF_PLANETS = [
     data: { type: 'Contact binary (cold classical KBO)', size: '36 × 20 × 10 km', semiMajorAxis: '44.6 AU', orbitalPeriod: '298 years', discovered: '2014' },
     description: 'A snowman-shaped contact binary visited by New Horizons on 1 January 2019, the most distant object ever explored by spacecraft. Its two lobes gently merged 4.5 billion years ago.',
   },
+  { id: 'vesta', name: 'Vesta', kind: 'asteroid', aliases: ['4 Vesta'], color: '#a9a29a', radiusKm: 262.7, massKg: 2.59e20, elements: 'vesta', rotationPeriodD: 0.2226, ellipsoid: [1.09, 0.85, 1.06], procedural: 'generic', kindLabel: 'Asteroid',
+    data: { type: 'Main-belt asteroid (protoplanet)', radius: '≈ 263 km (573 × 557 × 446 km)', mass: '2.59 × 10²⁰ kg', semiMajorAxis: '2.36 AU', orbitalPeriod: '3.63 years', rotationPeriod: '5.34 h', discovered: '1807 by Heinrich Olbers', visited: 'Dawn (2011–2012)' },
+    description: 'The second-most-massive body in the asteroid belt and the only one bright enough to be seen with the naked eye. Vesta is a surviving protoplanet with an iron core and basaltic crust; a giant impact carved the 500 km Rheasilvia basin at its south pole and sent fragments to Earth as HED meteorites.',
+    facts: ['About 6 % of all meteorites that fall on Earth come from Vesta.', 'Its south-pole central peak is 22 km high — more than twice Everest.'] },
+  { id: 'pallas', name: 'Pallas', kind: 'asteroid', aliases: ['2 Pallas'], color: '#8e8c8a', radiusKm: 256, massKg: 2.04e20, elements: 'pallas', rotationPeriodD: 0.3256, ellipsoid: [1.07, 0.96, 0.97], procedural: 'generic', kindLabel: 'Asteroid',
+    data: { type: 'Main-belt asteroid', radius: '≈ 256 km', mass: '2.04 × 10²⁰ kg', semiMajorAxis: '2.77 AU', orbitalPeriod: '4.62 years', inclination: '34.8° (highly inclined)', discovered: '1802 by Heinrich Olbers' },
+    description: 'The third-largest asteroid, on an orbit tilted almost 35° to the ecliptic — so steep that no spacecraft has been able to visit it. Its heavily cratered surface may have been hit at unusually high speeds because of that inclination.' },
+  { id: 'eros', name: 'Eros', kind: 'asteroid', aliases: ['433 Eros'], color: '#b0a08c', radiusKm: 8.42, massKg: 6.687e15, elements: 'eros', rotationPeriodD: 0.2194, ellipsoid: [2.02, 0.65, 0.65], procedural: 'generic', kindLabel: 'Near-Earth asteroid',
+    data: { type: 'Near-Earth asteroid (Amor)', size: '34 × 11 × 11 km', mass: '6.69 × 10¹⁵ kg', semiMajorAxis: '1.46 AU', orbitalPeriod: '1.76 years', rotationPeriod: '5.27 h', discovered: '1898', visited: 'NEAR Shoemaker (landed 2001)' },
+    description: 'A peanut-shaped near-Earth asteroid, the first to be orbited and landed on by a spacecraft (NEAR Shoemaker, 2001). Its gravity is so weak that a person could throw a rock into orbit.' },
+  { id: 'bennu', name: 'Bennu', kind: 'asteroid', aliases: ['101955 Bennu'], color: '#5a5651', radiusKm: 0.2455, massKg: 7.33e10, elements: 'bennu', rotationPeriodD: 0.1793, ellipsoid: [1.05, 0.93, 1.0], procedural: 'generic', kindLabel: 'Near-Earth asteroid',
+    data: { type: 'Near-Earth asteroid (Apollo, carbonaceous)', size: '≈ 490 m', mass: '7.3 × 10¹⁰ kg', semiMajorAxis: '1.13 AU', orbitalPeriod: '1.20 years', rotationPeriod: '4.30 h', discovered: '1999', visited: 'OSIRIS-REx (sample returned 2023)' },
+    description: 'A spinning-top-shaped rubble pile of carbon-rich rock. OSIRIS-REx touched its surface in 2020 and returned 120 g of pristine material to Earth in 2023. Bennu has a 1-in-1,750 chance of striking Earth between now and 2300.',
+    facts: ['Its surface was so loose that the sampling arm sank half a metre into it.', 'Sunlight slowly changes its orbit (the Yarkovsky effect) by about 284 m per year.'] },
 ];
 
 // Moons: a = semi-major axis (km), P = period (days), i = inclination (deg) relative to parent's equator
@@ -260,6 +278,21 @@ export const MOONS = [
   { id: 'charon', name: 'Charon', parent: 'pluto', color: '#b8b4b0', r: 606, massKg: 1.59e21, a: 19591, P: 6.387221, i: 0.08, procedural: 'charon', rotation: 'pluto',
     data: { type: 'Natural satellite', radius: '606 km (half of Pluto)', semiMajorAxis: '19,591 km', orbitalPeriod: '6.39 days', discovered: '1978 by James Christy' },
     description: 'So large relative to Pluto that the two form a double dwarf planet, mutually tidally locked. A dark reddish polar cap, Mordor Macula, is stained by methane escaping from Pluto.' },
+  { id: 'amalthea', name: 'Amalthea', parent: 'jupiter', color: '#b8705a', r: 83.5, massKg: 2.08e18, a: 181400, P: 0.498, i: 0.37, procedural: 'generic', ellipsoid: [1.5, 0.87, 0.78],
+    data: { type: 'Inner moon', radius: '125 × 73 × 64 km', semiMajorAxis: '181,400 km', orbitalPeriod: '11.95 h', discovered: '1872 by E. E. Barnard' },
+    description: 'The reddest object in the Solar System, an irregular inner moon skimming Jupiter just outside the main ring. Its surface is coated in sulfur from Io\'s volcanoes and it radiates more heat than it receives from the Sun.' },
+  { id: 'himalia', name: 'Himalia', parent: 'jupiter', color: '#8a8580', r: 85, massKg: 4.2e18, a: 11460000, P: 250.56, i: 27.5, procedural: 'generic', ellipsoid: [1.2, 0.9, 0.9],
+    data: { type: 'Irregular moon', radius: '≈ 85 km', semiMajorAxis: '11.46 million km', orbitalPeriod: '250.6 days', discovered: '1904 by C. D. Perrine' },
+    description: 'The largest of Jupiter\'s irregular outer moons — a captured asteroid on a distant, inclined orbit that takes over eight months to complete.' },
+  { id: 'hyperion', name: 'Hyperion', parent: 'saturn', color: '#a89a86', r: 135, massKg: 5.6e18, a: 1481010, P: 21.277, i: 0.43, procedural: 'generic', ellipsoid: [1.34, 0.95, 0.75],
+    data: { type: 'Irregular moon', radius: '180 × 133 × 103 km', semiMajorAxis: '1.48 million km', orbitalPeriod: '21.28 days', discovered: '1848' },
+    description: 'A sponge-like moon of deep, sharp-edged craters, tumbling chaotically: its rotation is not synchronous and cannot be predicted far ahead. Its density is so low that it may be a loose rubble pile.' },
+  { id: 'nereid', name: 'Nereid', parent: 'neptune', color: '#9aa4b4', r: 170, massKg: 3.1e19, a: 5513400, P: 360.13, i: 7.1, frame: 'ecliptic', procedural: 'generic',
+    data: { type: 'Irregular moon', radius: '≈ 170 km', semiMajorAxis: '5.51 million km', orbitalPeriod: '360.1 days', eccentricity: '0.75 (real orbit)', discovered: '1949 by Gerard Kuiper' },
+    description: 'Neptune\'s third-largest moon follows one of the most eccentric orbits of any moon (e = 0.75), swinging between 1.4 and 9.7 million km from the planet — drawn here as a circle at its mean distance.' },
+  { id: 'proteus', name: 'Proteus', parent: 'neptune', color: '#7f8892', r: 210, massKg: 4.4e19, a: 117647, P: 1.12231, i: 0.52, procedural: 'generic',
+    data: { type: 'Inner moon', radius: '≈ 210 km', semiMajorAxis: '117,647 km', orbitalPeriod: '1.12 days', discovered: '1989 by Voyager 2' },
+    description: 'Neptune\'s second-largest moon, yet so dark (albedo 0.1) that it was only found by Voyager 2. It is about as large as a body can be without gravity pulling it into a sphere.' },
 ];
 
 // Comets: perihelion date (UTC), q (AU), e, i, Omega, omega (deg), period (years)

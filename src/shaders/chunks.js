@@ -104,3 +104,22 @@ float lum3(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 export const ROTATE = /* glsl */`
 mat2 rot2(float a) { float s = sin(a), c = cos(a); return mat2(c, -s, s, c); }
 `;
+
+export const BAND_UTILS = /* glsl */`
+// multiwavelength weighting (0 visible · 1 infrared · 2 ultraviolet · 3 x-ray · 4 radio)
+float bandStarWeight(vec3 c, float band) {
+  float hot = clamp(c.b / max(c.r, 0.02) - 0.55, 0.0, 1.0);   // ~0 for red stars, ~1 for blue
+  if (band < 0.5) return 1.0;
+  if (band < 1.5) return 0.35 + 1.6 * (1.0 - hot);              // infrared: cool stars dominate
+  if (band < 2.5) return 0.05 + 2.2 * hot * hot;                // uv: hot stars only
+  if (band < 3.5) return 0.02 + 0.6 * pow(hot, 6.0);            // x-ray: only the very hottest
+  return 0.12;                                                  // radio: stars are faint
+}
+vec3 bandStarTint(vec3 c, float band) {
+  if (band < 0.5) return c;
+  if (band < 1.5) return mix(c, vec3(1.0, 0.55, 0.3), 0.7);
+  if (band < 2.5) return mix(c, vec3(0.6, 0.7, 1.0), 0.7);
+  if (band < 3.5) return mix(c, vec3(0.75, 0.6, 1.0), 0.8);
+  return mix(c, vec3(0.6, 1.0, 0.7), 0.8);
+}
+`;

@@ -39,6 +39,48 @@ browser exposes timer queries, otherwise frame time). Force a preset with
 sequence with `?nointro`. Press `F3` for the stats overlay (frame / JS / GPU ms,
 render scale, chunk generation).
 
+## Phase 2 — physics, science, immersion
+
+* **Realistic flight physics** (`4` or the *Flight* toggle): the camera becomes a
+  ship with inertia and thrusters in the real gravitational field of every body
+  (GM from the Sun, planets, moons, stars, Sgr A*). Velocity is integrated
+  against simulated time, so the time controls make orbits visible; the ship
+  HUD shows speed, the dominant attractor, periapsis/apoapsis and whether the
+  trajectory is bound or escaping. `X` matches the local body's velocity, `C`
+  inserts into a circular orbit, the wheel sets the throttle. Travel arrives in
+  a real orbit. *Exploration* mode keeps the free camera.
+* **Physics visualization** (`P`): predicted orbit (exact two-body conic),
+  velocity and gravity vectors, rotation axes, equators, orbital planes and
+  barycentres. Earth–Moon and Pluto–Charon really orbit their centres of mass.
+* **Body velocities, 26 moons, real asteroids** (Vesta, Pallas, Eros, Bennu),
+  lunar eclipses (the planet's shadow on its moons) and a **Find next eclipse**
+  tool that scans the simulation for solar and lunar eclipses.
+* **Science panel**: habitable zones (Kopparapu limits), magnetospheres,
+  heliosphere & solar wind, redshift/blueshift tinting, and the
+  **Observatory** — visible, infrared, ultraviolet, X-ray and radio views of
+  the whole scene (false colour, educational).
+* **Deep data**: derived physics (density, gravity, escape velocity…),
+  composition and atmosphere bars, astrobiology interest, stellar profiles with
+  evolutionary tracks, light-travel times, travel-time references (Voyager,
+  0.1 c, c), scale facts, provenance badges (observed / estimated / simulated /
+  procedural), a categorised curiosities database, discovery events and
+  contextual "did you know" cards.
+* **Content**: eight real exoplanet systems (Proxima b, TRAPPIST-1 a–h,
+  Kepler-186f, Kepler-452b, 51 Peg b, HD 189733 b, Kepler-22b, TOI-700),
+  binary companions, pulsars and magnetars with sweeping beams, Enceladus / Io /
+  Triton plumes, auroras, surface sites (Apollo landings, Mars rovers,
+  landmarks), Local Group dwarfs, Virgo Cluster, Laniakea and a simulated
+  cosmic web of filaments, clusters and voids.
+* **Simulations**: SUPERNOVA (collapse → flash → shock → remnant, clearly
+  labelled) and gravitational time dilation read-outs near Sgr A*.
+* **Exploration**: eight guided tours with documentary captions (Solar System,
+  Giants, Black Holes, Search for Life, Stellar Evolution, Galaxies, Extreme
+  Worlds, Cosmic Scale), OBSERVE auto-cinematics, the **Cosmic Database** (`B`)
+  with bookmarks, history, compare-size, measure-distance, cosmic timeline and
+  extremes, a galactic **star map** (`K`), **photo mode** (`F2`) and an
+  **immersive mode** (`H`) with adaptive ambient audio (nebula, black hole,
+  Earth, intergalactic silence) and pulsar sonification.
+
 ## Controls
 
 | Action | Input |
@@ -51,8 +93,8 @@ render scale, chunk generation).
 | Search | `/` or `Ctrl+K` — Earth, Saturn, Sagittarius A\*, Orion Nebula, Voyager 1, Andromeda… |
 | Time | `Space` pause · `[` `]` slower / faster · `N` now |
 | Toggles | `O` orbits · `L` labels · `C` constellations · `G` grid · `V` real / visual scale · `M` audio |
-| Camera modes | `1` free · `2` orbit · `3` follow · `R` reset · `T` cinematic tour |
-| UI | `H` hide UI · `F3` stats · `Esc` cancel travel / close |
+| Camera modes | `1` free · `2` orbit · `3` follow · `4` realistic flight · `R` reset · `T` tours |
+| UI | `H` immersive · `F2` photo mode · `F3` stats · `B` database · `K` star map · `P` physics · `Esc` cancel / close |
 
 ## What is in the box
 

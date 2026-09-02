@@ -100,6 +100,7 @@ export class Comet extends Body {
     this.radius = this.realRadius * (1 + scaleT * (VISUAL.smallRadius - 1));
     this.pole.set(0, 1, 0);
     this.quaternion.setFromAxisAngle(new THREE.Vector3(0.3, 1, 0.2).normalize(), (simMs / 3.6e6) % (Math.PI * 2));
+    this.trackVelocity(simMs);
     this.group.position.copy(this.position); this.group.quaternion.copy(this.quaternion); this.group.scale.setScalar(this.radius);
     this.group.updateMatrix(); this.group.matrixWorld.copy(this.group.matrix);
     this.rAU = r / AU;

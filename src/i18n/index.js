@@ -33,7 +33,7 @@ export const i18n = {
   kind(k) { return UI[lang].kinds[k] ?? UI.en.kinds[k] ?? k; },
   kindLabel(o) {
     const kl = o.kindLabel;
-    if (kl) return UI[lang].kindLabels[kl] ?? (lang === 'es' && ES_CONTENT[o.id]?.kindLabel) ?? kl;
+    if (kl) return UI[lang].kindLabels[kl] ?? (lang === 'es' ? ES_CONTENT[o.id]?.kindLabel : undefined) ?? kl;
     return this.kind(o.kind);
   },
   /** Localised display name of a registry object. */

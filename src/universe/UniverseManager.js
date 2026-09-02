@@ -53,7 +53,8 @@ export class UniverseManager {
     if (dGC < 60000 * LY && Math.abs(pos.clone().sub(g.centerScene).dot(new THREE.Vector3(0, 1, 0))) < 1e9 * LY) return 'rDisc';
     if (dGC < 200000 * LY) return 'rHalo';
     if (dGC < 5e6 * LY) return 'rLocal';
-    return 'rDeep';
+    if (dGC < 80e6 * LY) return 'rSupercluster';
+    return 'rWeb';
   }
 }
 

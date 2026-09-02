@@ -189,3 +189,109 @@ button { cursor: pointer; }
   .hud-bottom { grid-template-columns: 1fr; }
   .bottom-right { justify-content: flex-start; }
 }
+
+/* ---------- Phase 2: ship instruments, travel readout, science panel ---------- */
+.ship-hud { position: absolute; left: 22px; bottom: 150px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); backdrop-filter: blur(14px); font-size: 11px; line-height: 1.7; color: rgba(200,225,255,0.9); min-width: 240px; pointer-events: none; }
+.ship-hud[hidden] { display: none; }
+.ship-hud .sh-k { display: inline-block; width: 92px; letter-spacing: 0.18em; text-transform: uppercase; font-size: 9px; color: var(--muted); }
+.ship-hud .sh-warn { color: #ffb070; }
+.ship-hud .sh-bar { height: 2px; background: rgba(255,255,255,0.1); margin: 4px 0 2px; }
+.ship-hud .sh-bar i { display: block; height: 100%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.travel-hud { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); display: flex; gap: 22px; padding: 8px 18px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); backdrop-filter: blur(14px); font-size: 11px; color: rgba(223,230,240,0.9); pointer-events: none; white-space: nowrap; animation: panelIn 0.4s var(--ease); }
+.travel-hud[hidden] { display: none; }
+.travel-hud b { font-weight: 400; color: #fff; font-family: var(--mono); font-size: 11.5px; margin-left: 6px; }
+.travel-hud span { letter-spacing: 0.14em; text-transform: uppercase; font-size: 9px; color: var(--muted); }
+.science-panel { width: 340px; }
+.panel .row-btns { grid-template-columns: 1fr; gap: 6px; }
+.panel .row-btns .btn { height: 30px; font-size: 11px; justify-content: center; }
+.info-badge { display: inline-block; margin-left: 8px; padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; font-size: 8.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); vertical-align: middle; }
+.info-badge.observed { color: #8fe3b4; border-color: rgba(143,227,180,0.35); }
+.info-badge.procedural { color: #ffb070; border-color: rgba(255,176,112,0.35); }
+.info-badge.simulated, .info-badge.estimated { color: #9fb6ff; border-color: rgba(159,182,255,0.35); }
+.info-section { margin-top: 14px; }
+.info-section-title { font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+.info-note { font-size: 10.5px; color: var(--faint); line-height: 1.5; margin-top: 4px; }
+
+/* ---------- Phase 2: science sections ---------- */
+.comp-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,0.06); margin: 4px 0 6px; }
+.comp-bar i { display: block; height: 100%; min-width: 1px; }
+.comp-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 10.5px; color: var(--muted); }
+.comp-legend b { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.comp-legend em { font-style: normal; font-family: var(--mono); color: rgba(255,255,255,0.75); margin-left: 3px; }
+.info-text { font-size: 12px; line-height: 1.55; color: rgba(223,230,240,0.85); font-weight: 300; }
+.info-section.astro { border-left: 2px solid rgba(143,227,180,0.5); padding-left: 10px; }
+.evo { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.evo-step { font-size: 10.5px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+.evo-step.past { opacity: 0.55; }
+.evo-step.now { color: #fff; border-color: rgba(143,188,255,0.7); background: rgba(143,188,255,0.14); box-shadow: 0 0 12px rgba(143,188,255,0.25); }
+.evo-arrow { color: var(--faint); font-size: 11px; }
+/* discovery card & did-you-know */
+.discovery { position: absolute; left: 50%; top: 22%; transform: translate(-50%, -10px); text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.8s var(--ease), transform 0.8s var(--ease); max-width: 520px; }
+.discovery.show { opacity: 1; transform: translate(-50%, 0); }
+.dc-tag { font-size: 10px; letter-spacing: 0.4em; text-transform: uppercase; color: var(--accent); }
+.dc-name { margin-top: 10px; font-size: clamp(26px, 4vw, 46px); font-weight: 200; letter-spacing: 0.18em; color: #fff; text-shadow: 0 0 30px rgba(143,188,255,0.35); }
+.dc-sub { margin-top: 6px; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+.dc-fact { margin: 14px auto 0; max-width: 440px; font-size: 13px; line-height: 1.55; font-weight: 300; color: rgba(223,230,240,0.85); }
+.didyouknow { position: absolute; right: 22px; bottom: 150px; width: 300px; padding: 12px 16px; border: 1px solid var(--line); border-left: 2px solid var(--accent-2); border-radius: 12px; background: var(--panel); backdrop-filter: blur(14px); opacity: 0; transform: translateY(8px); transition: opacity 0.6s var(--ease), transform 0.6s var(--ease); pointer-events: none; }
+.didyouknow.show { opacity: 1; transform: none; }
+.dk-tag { font-size: 9.5px; letter-spacing: 0.26em; text-transform: uppercase; color: var(--accent-2); }
+.dk-cat { float: right; color: var(--faint); letter-spacing: 0.12em; }
+.dk-text { margin-top: 6px; font-size: 12px; line-height: 1.55; font-weight: 300; color: rgba(223,230,240,0.9); }
+
+/* ---------- Phase 2: tour menu ---------- */
+.tour-menu { width: 360px; max-height: calc(100vh - 160px); overflow-y: auto; }
+.tour-item { display: block; width: 100%; text-align: left; padding: 10px 12px; margin-top: 6px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,0.03); color: var(--text); cursor: pointer; transition: border-color 0.2s, background 0.2s; }
+.tour-item:hover { border-color: rgba(143,188,255,0.5); background: rgba(143,188,255,0.08); }
+.tour-item .ti-name { font-size: 13px; letter-spacing: 0.04em; }
+.tour-item .ti-desc { margin-top: 3px; font-size: 11px; color: var(--muted); font-weight: 300; line-height: 1.45; }
+.tour-item .ti-meta { margin-top: 4px; font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); }
+.tour-item.stop { border-color: rgba(255,176,112,0.4); color: #ffb070; text-align: center; }
+
+/* ---------- Phase 2: observatory tag, supernova hud ---------- */
+.band-tag { position: absolute; left: 50%; top: 74px; transform: translateX(-50%); padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); backdrop-filter: blur(14px); font-size: 10px; letter-spacing: 0.26em; text-transform: uppercase; color: #fff; pointer-events: none; }
+.band-tag[hidden] { display: none; }
+.band-tag small { display: block; text-align: center; letter-spacing: 0.14em; color: var(--muted); font-size: 8.5px; margin-top: 2px; text-transform: none; }
+.sn-hud { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); width: 420px; padding: 10px 16px; border: 1px solid rgba(255,176,112,0.4); border-radius: 12px; background: var(--panel); backdrop-filter: blur(14px); pointer-events: none; text-align: center; }
+.sn-hud[hidden] { display: none; }
+.sn-hud .sn-phase { font-size: 12px; color: #fff; letter-spacing: 0.04em; }
+.sn-hud .sn-note { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: #ffb070; margin-top: 4px; }
+.sn-hud .sn-bar { height: 2px; background: rgba(255,255,255,0.1); margin-top: 8px; }
+.sn-hud .sn-bar i { display: block; height: 100%; background: #ffb070; box-shadow: 0 0 8px #ffb070; }
+
+/* ---------- Phase 2: database, star map ---------- */
+.database { width: 440px; max-height: calc(100vh - 160px); display: flex; flex-direction: column; }
+.database[hidden] { display: none; }
+.db-search { width: 100%; box-sizing: border-box; margin: 4px 0 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.04); color: var(--text); font-size: 12px; outline: 0; }
+.db-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.db-tab { padding: 4px 9px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+.db-tab.on, .db-tab:hover { color: #fff; border-color: rgba(143,188,255,0.5); background: rgba(143,188,255,0.12); }
+.db-body { overflow-y: auto; flex: 1; min-height: 0; }
+.db-count { font-size: 9.5px; letter-spacing: 0.2em; color: var(--faint); margin-bottom: 4px; }
+.db-item { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 8px; padding: 6px 4px; border-top: 1px solid var(--line); cursor: pointer; }
+.db-item:hover { background: rgba(143,188,255,0.06); }
+.db-item.ex { grid-template-columns: 1fr auto; }
+.db-dot { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
+.db-name { font-size: 12.5px; }
+.db-kind { grid-column: 2; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.db-desc { font-size: 11px; color: var(--muted); line-height: 1.45; font-weight: 300; margin-top: 2px; }
+.db-actions { grid-column: 3; grid-row: 1 / span 2; display: flex; gap: 4px; }
+.db-item.ex .db-actions { grid-column: 2; grid-row: 1; }
+.db-actions .btn { height: 26px; padding: 0 9px; font-size: 10px; }
+.cmp-svg { width: 100%; display: block; margin: 8px 0; }
+.cmp-row { display: grid; grid-template-columns: 10px 1fr auto auto; gap: 8px; align-items: center; padding: 5px 4px; border-top: 1px solid var(--line); font-size: 12px; cursor: pointer; }
+.cmp-val { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.tl-row { display: grid; grid-template-columns: 150px 1fr; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12px; }
+.tl-when { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.tl-row.now .tl-when, .tl-row.now .tl-what { color: #fff; }
+.tl-row.future { opacity: 0.7; font-style: italic; }
+.info-tools { margin-top: -6px; }
+.info-tools .btn.on { color: #ffd080; border-color: rgba(255,208,128,0.5); }
+.starmap { position: absolute; left: 22px; bottom: 150px; width: 260px; height: 260px; border: 1px solid var(--line); border-radius: 12px; background: rgba(4,6,12,0.6); backdrop-filter: blur(10px); cursor: pointer; }
+.starmap[hidden] { display: none; }
+
+/* ---------- Phase 2: photo mode ---------- */
+.photo-panel { width: 300px; left: 22px; right: auto; top: 74px; }
+.photo-head { display: flex; justify-content: space-between; align-items: center; } .photo-head .panel-title { margin-bottom: 0; }
+.photo-panel.ghost { opacity: 0.12; } .photo-panel.ghost:hover { opacity: 1; }
+#hud.photo .hud-top, #hud.photo .hud-bottom, #hud.photo .info-panel, #hud.photo .ship-hud, #hud.photo .travel-hud, #hud.photo .debug-panel, #hud.photo .didyouknow { opacity: 0; pointer-events: none; }
+#hud.photo .hud-top .top-right { opacity: 1; pointer-events: auto; }

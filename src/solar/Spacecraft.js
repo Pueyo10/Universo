@@ -147,6 +147,7 @@ export class Spacecraft extends Body {
       this.quaternion.setFromRotationMatrix(m);
     }
     this.radius = this.realRadius * (1 + scaleT * (VISUAL.smallRadius - 1));
+    this.trackVelocity(simMs);
     this.group.position.copy(this.position); this.group.quaternion.copy(this.quaternion); this.group.scale.setScalar(this.radius);
     this.group.updateMatrix(); this.group.matrixWorld.copy(this.group.matrix);
   }

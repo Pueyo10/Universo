@@ -12,6 +12,10 @@ import { buildSpacecraft } from './Spacecraft.js';
 import { OrbitLines, Markers } from './OrbitLines.js';
 import { generateSurfaceAsync, generateRingTexture, normalFromImage } from './TextureFactory.js';
 import { ExoSystemManager } from './ExoSystem.js';
+import { SurfaceSites } from './SurfaceSites.js';
+import { HabitableZoneLayer } from './HabitableZone.js';
+import { Plumes } from './Plumes.js';
+import { Auroras } from './Aurora.js';
 
 // Orchestrates the Solar System: bodies, orbits, rendering LOD, scale mode,
 // exposure, the Sun's lens flare / occlusion and the sunlight for spacecraft.
@@ -89,6 +93,10 @@ export class SolarSystemManager {
     this.engine.scene.add(this.light); this.engine.scene.add(this.light.target);
     this.engine.scene.add(new THREE.AmbientLight(0x334455, 0.12));
     this.exo = new ExoSystemManager(this.ctx, this);
+    this.sites = new SurfaceSites(this.ctx, this);
+    this.habitable = new HabitableZoneLayer(this.ctx, this);
+    this.plumes = new Plumes(this.ctx, this);
+    this.auroras = new Auroras(this.ctx, this);
     this.update(0, 0, this.cameraCtl.position);
     return this;
   }
@@ -155,12 +163,10 @@ export class SolarSystemManager {
         }).finally(() => { this._upgrading = false; });
       }
     }
-    // scale-mode blend
-    this.scaleT = damp(this.scaleT, this.scaleTarget, 3, dt);
-    if (Math.abs(this.scaleT - this.scaleTarget) < 0.002) this.scaleT = this.scaleTarget;
     const simMs = this.time.simMs;
-    // positions (parents first: bodies array is in creation order)
-    for (const b of this.bodies) b.update(simMs, this.scaleT);
+    // positions are normally advanced by updatePositions() *before* the camera runs
+    // (otherwise an orbiting camera lags the body by one frame and shakes at high time speeds)
+    if (this._posFrame !== this.engine.frame) this.updatePositions(dt);
     // ---- exposure: darker near the Sun / bright bodies, brighter in deep space
     const dSun = camPos.length();
     const near = this.cameraCtl.nearest;
@@ -189,6 +195,7 @@ export class SolarSystemManager {
       if (b.renderer) {
         shadowMoons.length = 0;
         if (b.kind === 'planet' && b.children) { for (const m of b.children) if (m.kind === 'moon') shadowMoons.push(m); shadowMoons.sort((a, c) => c.radius - a.radius); }
+        else if (b.kind === 'moon' && b.parent) shadowMoons.push(b.parent);   // the planet's shadow on its moon: lunar eclipses
         b.renderer.update(t, camPos, sunPos, rpx, shadowMoons, 1.0);
         if (b.rings) b.rings.update(t, camPos, sunPos, rpx, 1.0, cam);
         b.group.visible = rpx > 0.4;
@@ -203,12 +210,75 @@ export class SolarSystemManager {
     this.orbits.update(camPos, this.scaleT);
     this.markers.update(camPos, cam);
     this.exo.update(dt, t, camPos, simMs, this.scaleT, 1.0);
+    if (this.habitable) this.habitable.update(dt, t, camPos);
+    if (this.plumes) this.plumes.update(dt, t, camPos);
+    if (this.auroras) this.auroras.update(dt, t, camPos, sunPos);
     // ---- sunlight for standard materials: from the Sun toward the camera's neighbourhood
     this.light.position.copy(camPos).negate().normalize().multiplyScalar(10);
     this.light.position.add(camPos); this.light.target.position.copy(camPos);
     this.light.intensity = 3.2 * sceneExposure;
     // ---- lens flare: sun screen position & occlusion
     this._updateFlare(camPos, cam, fovScale);
+    // ---- atmospheric entry: haze, exposure and colour as the camera descends into an atmosphere
+    this._updateAtmosphereEntry(camPos, near);
+  }
+
+  /** Advance the scale blend and every body position for the current simulated time. Call before the camera. */
+  updatePositions(dt) {
+    this._posFrame = this.engine.frame;
+    this.scaleT = damp(this.scaleT, this.scaleTarget, 3, dt);
+    if (Math.abs(this.scaleT - this.scaleTarget) < 0.002) this.scaleT = this.scaleTarget;
+    const simMs = this.time.simMs;
+    for (const b of this.bodies) b.update(simMs, this.scaleT);   // parents first: bodies array is in creation order
+    this._applyBarycenters(simMs);
+    if (this.exo) this.exo.updatePositions(simMs, this.scaleT);
+  }
+
+  /**
+   * Real two-body systems orbit their common centre of mass: shift a flagged parent
+   * (Earth, Pluto) off the Keplerian point by -sum(m_i r_i) / (M + sum m_i) and carry its
+   * moons along. Visible in the physics visualisation as the barycentre marker.
+   */
+  _applyBarycenters(simMs) {
+    for (const b of this.bodies) {
+      if (!b.def.barycenter || !b.def.massKg || !b.children.length) continue;
+      let M = b.def.massKg; const sum = this._v.set(0, 0, 0);
+      for (const m of b.children) { if (m.kind !== 'moon' || !m.def || !m.def.massKg) continue; M += m.def.massKg; sum.addScaledVector(this._v2.copy(m.position).sub(b.position), m.def.massKg); }
+      if (M <= b.def.massKg) continue;
+      const shift = sum.multiplyScalar(-1 / M);
+      b.barycenter = (b.barycenter || new THREE.Vector3()).copy(b.position);   // the Keplerian point IS the barycentre
+      b.position.add(shift); b.trackVelocity(simMs); b.syncGroup();
+      for (const m of b.children) { if (m.kind !== 'moon' || !m.def) continue; m.position.add(shift); m.trackVelocity(simMs); m.syncGroup(); }
+    }
+  }
+
+  _updateAtmosphereEntry(camPos, near) {
+    const fp = this.engine.finalPass.uniforms;
+    let haze = 0;
+    const b = near.obj;
+    if (b && b.def && b.def.atmosphere && b.renderer) {
+      const atmo = b.def.atmosphere;
+      const alt = near.dist / b.radius;                 // altitude in radii
+      const top = atmo.height * 1.2;
+      if (alt < top) {
+        const depth = 1 - alt / top;                    // 0 at the top of the atmosphere, 1 at the surface
+        const dens = Math.min(atmo.density, 3) / 3;
+        // day side only: the haze is scattered sunlight
+        const sunDir = this._v.copy(b.position).negate().normalize();
+        const up = this._v2.copy(camPos).sub(b.position).normalize();
+        const day = clamp(0.15 + 0.85 * smoothstep(-0.2, 0.3, up.dot(sunDir)), 0, 1);
+        haze = Math.pow(depth, 1.6) * (0.25 + 0.75 * dens) * day * (atmo.thick ? 0.95 : 0.7);
+        const c = atmo.color; fp.uHazeColor.value.setRGB(c[0], c[1], c[2]);
+        // realistic flight: buffet at high speed inside the atmosphere
+        if (this.cameraCtl.mode === 'SHIP' && this.cameraCtl.ship) {
+          const v = this.cameraCtl.ship.velocity.length() * 1000;   // km/s relative to the Sun; use relative to body
+          const rel = this._v.copy(this.cameraCtl.ship.velocity).sub(b.velocity).length() * 1000;
+          const shake = clamp((rel - 2) / 6, 0, 1) * depth * 0.004;
+          if (shake > 0) { this.cameraCtl.yaw += (Math.random() - 0.5) * shake; this.cameraCtl.pitch += (Math.random() - 0.5) * shake; }
+        }
+      }
+    }
+    fp.uHaze.value = damp(fp.uHaze.value, haze, 4, this.engine.dt || 0.016);
   }
 
   _updateFlare(camPos, cam, fovScale) {

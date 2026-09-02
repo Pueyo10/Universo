@@ -50,7 +50,7 @@ const frag = /* glsl */`
   varying vec3 vViewDir; varying vec3 vLocal;
   uniform mat3 uCamToWorld;
   uniform vec3 uCamLocal;            // camera position in local (unit-sphere) coords
-  uniform float uTime, uSeed, uType, uBright, uDust, uReflection, uRing, uBubble, uPillars, uVeil, uFade;
+  uniform float uTime, uSeed, uType, uBright, uDust, uReflection, uRing, uBubble, uPillars, uVeil, uFade, uBand;
   uniform int uSteps;
   uniform vec3 uStar[4];
   uniform int uStarCount;
@@ -159,6 +159,13 @@ const frag = /* glsl */`
     }
     vec3 col = acc * uFade;
     float alpha = (1.0 - T) * uFade;
+    if (uBand > 0.5) {
+      float l = dot(col, vec3(0.3, 0.5, 0.2));
+      if (uBand < 1.5) col = mix(col, vec3(1.0, 0.5, 0.2) * l * 1.4, 0.85);                       // infrared: warm dust glow
+      else if (uBand < 2.5) col = mix(col, vec3(0.45, 0.6, 1.0) * l * (uType < 0.5 ? 1.6 : 0.6), 0.85); // uv: ionised gas
+      else if (uBand < 3.5) { float x = uType > 1.5 && uType < 2.5 ? 2.0 : 0.05; col = vec3(0.7, 0.55, 1.0) * l * x; alpha *= uType > 1.5 && uType < 2.5 ? 1.0 : 0.2; } // x-ray: remnants only
+      else col = mix(col, vec3(0.45, 1.0, 0.6) * l * 1.2, 0.85);                                     // radio
+    }
     if (alpha < 0.003 && max(col.r, max(col.g, col.b)) < 0.003) discard;
     // premultiplied output: color already weighted; blend as (1, 1-alpha)
     gl_FragColor = vec4(col, alpha);
@@ -181,7 +188,7 @@ export class NebulaManager {
     this._buildCatalog();
     this._buildProcedural();
     this.starMaterial = new THREE.ShaderMaterial({
-      uniforms: { uExposure: { value: 1 }, uPixelRatio: { value: 1 }, uMaxSize: { value: 40 }, uFade: { value: 1 }, uTime: { value: 0 }, uMinLum: { value: 0 } },
+      uniforms: { uExposure: { value: 1 }, uPixelRatio: { value: 1 }, uMaxSize: { value: 40 }, uFade: { value: 1 }, uTime: { value: 0 }, uMinLum: { value: 0 }, uBand: { value: 0 } },
       vertexShader: nearStarVert, fragmentShader: nearStarFrag, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     });
     this._buildStars();
@@ -198,7 +205,7 @@ export class NebulaManager {
       uniforms: {
         uCamToWorld: { value: new THREE.Matrix3() }, uCamLocal: { value: new THREE.Vector3() }, uTime: { value: 0 }, uSeed: { value: def.seed }, uType: { value: def.type },
         uBright: { value: def.bright || 1 }, uDust: { value: def.dust ?? 0.7 }, uReflection: { value: def.reflection || 0 }, uRing: { value: def.ring || 0 }, uBubble: { value: def.bubble || 0 }, uPillars: { value: def.pillars || 0 }, uVeil: { value: def.veil || 0 }, uFade: { value: 1 },
-        uSteps: { value: 32 }, uStar: { value: stars }, uStarCount: { value: Math.min(sc, 4) },
+        uSteps: { value: 32 }, uStar: { value: stars }, uStarCount: { value: Math.min(sc, 4) }, uBand: { value: 0 },
       },
       vertexShader: vert, fragmentShader: frag, transparent: true, depthWrite: false, depthTest: false, side: THREE.BackSide,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,

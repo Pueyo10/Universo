@@ -128,6 +128,31 @@ export function formatDistance(units) {
   return `${fmtNum(km / LY_KM / 1e9, 4)} ${U('uGly')}`;
 }
 
+/** Light travel time for a distance in scene units. */
+export function formatLightTime(units) {
+  const s = units * UNIT_KM / 299792.458;
+  if (s < 1) return `${fmtNum(s * 1000, 3)} ${U('uLightMs')}`;
+  if (s < 90) return `${fmtNum(s, 3)} ${U('uLightS')}`;
+  if (s < 5400) return `${fmtNum(s / 60, 3)} ${U('uLightMin')}`;
+  if (s < 86400 * 1.5) return `${fmtNum(s / 3600, 3)} ${U('uLightH')}`;
+  if (s < 31557600 * 0.9) return `${fmtNum(s / 86400, 3)} ${U('uLightD')}`;
+  const y = s / 31557600;
+  if (y < 1e4) return `${fmtNum(y, 4)} ${U('uLightY')}`;
+  if (y < 1e7) return `${fmtNum(y / 1e3, 4)} ${U('uLightKy')}`;
+  if (y < 1e10) return `${fmtNum(y / 1e6, 4)} ${U('uLightMy')}`;
+  return `${fmtNum(y / 1e9, 4)} ${U('uLightGy')}`;
+}
+
+/** Distance in the astronomer's unit for the scale (parsecs and friends), for the info panel. */
+export function formatDistanceAstro(units) {
+  const km = units * UNIT_KM;
+  if (km < 0.05 * LY_KM) return `${fmtNum(km / AU_KM, 4)} ${U('uAU')}`;
+  const pc = km / (LY_KM * 3.26156);
+  if (pc < 1000) return `${fmtNum(pc, 4)} pc`;
+  if (pc < 1e6) return `${fmtNum(pc / 1e3, 4)} kpc`;
+  return `${fmtNum(pc / 1e6, 4)} Mpc`;
+}
+
 export function formatSpeed(unitsPerSec) {
   const kms = unitsPerSec * UNIT_KM;
   const c = 299792.458;

@@ -17,7 +17,7 @@ const engine = new Engine(canvas, quality);
 const registry = new Registry();
 const time = new TimeManager();
 const universe = new UniverseManager(engine, registry, time);
-const cameraCtl = new CameraController(engine, registry, canvas);
+const cameraCtl = new CameraController(engine, registry, canvas, time);
 
 window.__universe = { engine, registry, time, universe, cameraCtl, THREE };
 
@@ -45,15 +45,16 @@ async function boot() {
   cameraCtl.setPose(start, gc);
 
   engine.addSystem({ update: (dt, t) => { time.update(dt); } });
+  engine.addSystem({ update: (dt) => { if (universe.solar) universe.solar.updatePositions(dt); } });   // bodies first, then the camera that tracks them
   engine.addSystem(cameraCtl);
   engine.addSystem({ update: (dt, t) => universe.update(dt, t, engine.camera) });
   engine.addSystem(ui);
   const { CinematicTour } = await import('./camera/CinematicTour.js');
   const tour = new CinematicTour({ engine, registry, cameraCtl, ui, time });
   const { AudioManager } = await import('./audio/AudioManager.js');
-  const audio = new AudioManager(cameraCtl);
+  const audio = new AudioManager(cameraCtl, universe);
   engine.addSystem(audio);
-  window.__universe.tour = tour; window.__universe.audio = audio;
+  window.__universe.tour = tour; window.__universe.audio = audio; ui.ctx.tour = tour;
   bus.on('camera:reset', () => { cameraCtl.cancelTravel(); cameraCtl.setMode('FREE'); cameraCtl.setPose(start, gc); ui.toast('Camera reset'); });
   // compile every shader now (loading screen) so no first visit stalls the frame loop
   const tWarm = performance.now();

@@ -10,6 +10,11 @@ export async function attachModules(ctx) {
     ['Sagittarius A*', async () => { const m = await import('./BlackHole.js'); ctx.blackHole = new m.BlackHole(ctx); ctx.universe.add(ctx.blackHole); ctx.universe.blackHole = ctx.blackHole; }],
     ['Distant galaxies', async () => { const m = await import('./DistantGalaxies.js'); ctx.galaxies = new m.DistantGalaxies(ctx); ctx.universe.add(ctx.galaxies); ctx.universe.galaxies = ctx.galaxies; }],
     ['Grids', async () => { const m = await import('./Grids.js'); ctx.grids = new m.GridLayer(ctx); ctx.universe.add(ctx.grids); ctx.universe.grids = ctx.grids; }],
+    ['Physics', async () => { const m = await import('../systems/PhysicsViz.js'); ctx.physicsViz = new m.PhysicsViz(ctx); ctx.universe.add(ctx.physicsViz); ctx.universe.physicsViz = ctx.physicsViz; }],
+    ['Pulsars', async () => { const m = await import('./Pulsars.js'); ctx.pulsars = new m.Pulsars(ctx); ctx.universe.add(ctx.pulsars); ctx.universe.pulsars = ctx.pulsars; }],
+    ['Supernova', async () => { const m = await import('./Supernova.js'); ctx.supernova = new m.SupernovaSim(ctx); ctx.universe.add(ctx.supernova); ctx.universe.supernova = ctx.supernova; }],
+    ['Heliosphere', async () => { const m = await import('./Heliosphere.js'); ctx.heliosphere = new m.Heliosphere(ctx, ctx.solar); ctx.universe.add(ctx.heliosphere); ctx.universe.heliosphere = ctx.heliosphere; }],
+    ['Observatory', async () => { const m = await import('./Observatory.js'); ctx.observatory = new m.Observatory(ctx); ctx.universe.observatory = ctx.observatory; }],
   ];
   let i = 0;
   for (const [name, fn] of steps) {

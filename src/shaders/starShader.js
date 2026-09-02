@@ -1,4 +1,4 @@
-import { LOGDEPTH_PARS_VERT, LOGDEPTH_VERT, LOGDEPTH_PARS_FRAG, LOGDEPTH_FRAG } from './chunks.js';
+import { LOGDEPTH_PARS_VERT, LOGDEPTH_VERT, LOGDEPTH_PARS_FRAG, LOGDEPTH_FRAG, BAND_UTILS } from './chunks.js';
 import { LY } from '../core/Units.js';
 
 // Point-sprite star shader for resolved (near) stars: physically-motivated
@@ -10,17 +10,18 @@ export const nearStarVert = /* glsl */`
   attribute float seed;
   varying vec3 vColor;
   varying float vAlpha, vSize, vSeed;
-  uniform float uExposure, uPixelRatio, uMaxSize, uFade, uTime, uMinLum;
+  uniform float uExposure, uPixelRatio, uMaxSize, uFade, uTime, uMinLum, uBand;
   ${LOGDEPTH_PARS_VERT}
+  ${BAND_UTILS}
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     float dLy = length(mv.xyz) / ${LY.toExponential(6)};
-    float flux = lum / max(dLy * dLy, 1e-8) * uExposure;
+    float flux = lum / max(dLy * dLy, 1e-8) * uExposure * bandStarWeight(color, uBand);
     float b = log2(1.0 + flux * 40.0);
     float size = clamp(1.2 + b * 2.4, 0.0, uMaxSize);
     float alpha = clamp(flux * 6.0, 0.0, 1.0);
     alpha *= 0.94 + 0.06 * sin(uTime * 2.1 + seed * 40.0);
-    vColor = color;
+    vColor = bandStarTint(color, uBand);
     vAlpha = alpha * uFade * step(uMinLum, lum);
     vSize = size;
     vSeed = seed;
