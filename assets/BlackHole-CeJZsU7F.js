@@ -1,4 +1,4 @@
-import{$i as e,A as t,L as n,Pr as r,_a as i,eo as a,er as o,j as s,qt as c,ua as l,va as u}from"./three.core-CpYT6u8q.js";import{d,s as f,u as p,y as m}from"./Units-B-K3UxBs.js";import{t as h}from"./Random-BQY5ImTV.js";import{g,h as _}from"./index-B3wEKzzH.js";import{t as v}from"./starShader-DI862JXY.js";var y=11405311390599999e11/299792458**2/1e3,b=`
+import{$i as e,A as t,L as n,Pr as r,_a as i,eo as a,er as o,j as s,qt as c,ua as l,va as u}from"./three.core-CpYT6u8q.js";import{d,s as f,u as p,y as m}from"./Units-C4pAkV58.js";import{t as h}from"./Random-BQY5ImTV.js";import{g,h as _}from"./index-DCRU37wS.js";import{t as v}from"./starShader-BAoVeJTY.js";var y=11405311390599999e11/299792458**2/1e3,b=`
   attribute float lum; attribute vec3 color; attribute float seed;
   attribute vec3 orbit;   // radius, phase, incl
   varying vec3 vColor; varying float vAlpha, vSize;

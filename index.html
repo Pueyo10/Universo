@@ -7,14 +7,14 @@
   <meta name="description" content="A real-time explorable 3D universe: Milky Way, Solar System, planets, moons, nebulae and Sagittarius A*. Universo 3D explorable en tiempo real." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%225%22 fill=%22%23fff%22/%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2212%22 fill=%22none%22 stroke=%22%237fb4ff%22 stroke-width=%221.5%22 opacity=%22.7%22/%3E%3C/svg%3E" />
-  <script type="module" crossorigin src="./assets/index-B3wEKzzH.js"></script>
+  <script type="module" crossorigin src="./assets/index-DCRU37wS.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/three.core-CpYT6u8q.js">
   <link rel="modulepreload" crossorigin href="./assets/EventBus-DzLmJ1Bg.js">
-  <link rel="modulepreload" crossorigin href="./assets/Units-B-K3UxBs.js">
+  <link rel="modulepreload" crossorigin href="./assets/Units-C4pAkV58.js">
   <link rel="modulepreload" crossorigin href="./assets/Random-BQY5ImTV.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-BnbFV-bH.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-DNS7l1qN.css">
 </head>
 <body>
   <div id="app">
@@ -66,10 +66,14 @@
       <aside id="info-panel" class="info-panel" hidden>
         <div class="info-head">
           <div class="info-kind" id="info-kind">PLANET</div>
-          <button class="btn btn-icon info-close" id="info-close" data-i18n-title="close" title="Close (Esc)">×</button>
+          <div class="info-head-btns">
+            <button class="btn btn-icon info-close info-collapse" id="info-collapse" data-i18n-title="collapse" title="Collapse">▾</button>
+            <button class="btn btn-icon info-close" id="info-close" data-i18n-title="close" title="Close (Esc)">×</button>
+          </div>
         </div>
         <h2 class="info-name" id="info-name">Earth</h2>
         <div class="info-sub" id="info-sub"></div>
+        <div class="info-body" id="info-body">
         <div class="info-actions">
           <button class="btn" id="info-focus" data-i18n="focus">Focus</button>
           <button class="btn btn-accent" id="info-travel" data-i18n="travelTo">Travel to</button>
@@ -88,7 +92,9 @@
         <div id="info-science"></div>
         <div class="info-section info-grid" id="info-speedrefs"></div>
         <div class="info-children" id="info-children"></div>
+        </div>
       </aside>
+      <button class="info-tab" id="info-tab" hidden data-i18n-title="showPanel" title="Show panel"><span class="info-tab-arrow">◂</span><span id="info-tab-name"></span></button>
 
       <!-- Bottom -->
       <footer class="hud-bottom">
@@ -271,6 +277,6 @@
         <div class="intro-status" id="intro-status" data-i18n="loading">Generating universe…</div>
       </div>
     </div>
-  </div>
+  </div>
 </body>
 </html>
