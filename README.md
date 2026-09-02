@@ -17,6 +17,10 @@ regiones y cada objeto (nombres, descripciones, datos, curiosidades). Cambia el
 idioma con el botón **ES / EN** de la barra superior, el ajuste *Idioma* o
 `?lang=es`. La elección se recuerda; la primera visita sigue el idioma del navegador.
 
+## Live / En vivo
+
+https://pueyo10.github.io/Universo/ — open it in a WebGL2 browser (Chrome, Edge, Firefox).
+
 ## Run
 
 ```bash
