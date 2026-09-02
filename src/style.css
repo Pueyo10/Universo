@@ -91,6 +91,16 @@ button { cursor: pointer; }
 /* ---------- Info panel ---------- */
 .info-panel { position: absolute; top: 74px; right: 22px; width: 350px; max-height: calc(100vh - 210px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; backdrop-filter: blur(22px) saturate(140%); padding: 18px 20px 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.55); animation: panelIn 0.45s var(--ease); scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
 .info-panel[hidden] { display: none; }
+.info-head-btns { display: flex; gap: 4px; }
+.info-collapse { font-size: 14px; transition: transform 0.3s var(--ease); }
+.info-panel.collapsed .info-collapse { transform: rotate(180deg); }
+.info-panel.collapsed .info-body { display: none; }
+.info-panel.collapsed { padding-bottom: 16px; overflow: hidden; }
+.info-tab { position: absolute; top: 74px; right: 0; display: flex; align-items: center; gap: 8px; max-width: 46vw; height: 36px; padding: 0 14px 0 10px; border: 1px solid var(--line); border-right: 0; border-radius: 999px 0 0 999px; background: var(--panel); backdrop-filter: blur(18px); color: var(--text); font: inherit; font-size: 11.5px; letter-spacing: 0.04em; cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,0.4); animation: panelIn 0.35s var(--ease); pointer-events: auto; }
+.info-tab:hover { background: rgba(255,255,255,0.1); }
+.info-tab[hidden] { display: none; }
+.info-tab-arrow { color: var(--accent); font-size: 13px; }
+.info-tab span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes panelIn { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
 .info-head { display: flex; justify-content: space-between; align-items: center; }
 .info-kind { font-size: 9.5px; letter-spacing: 0.26em; color: var(--accent); text-transform: uppercase; }
@@ -185,7 +195,8 @@ button { cursor: pointer; }
 @media (max-width: 900px) {
   .hud-top { grid-template-columns: 1fr; }
   .top-right { justify-content: flex-start; }
-  .info-panel { width: calc(100vw - 44px); right: 22px; }
+  .info-panel { width: calc(100vw - 44px); right: 22px; top: 176px; max-height: calc(100vh - 356px); }
+  .info-tab { top: 176px; }
   .hud-bottom { grid-template-columns: 1fr; }
   .bottom-right { justify-content: flex-start; }
 }
@@ -293,5 +304,5 @@ button { cursor: pointer; }
 .photo-panel { width: 300px; left: 22px; right: auto; top: 74px; }
 .photo-head { display: flex; justify-content: space-between; align-items: center; } .photo-head .panel-title { margin-bottom: 0; }
 .photo-panel.ghost { opacity: 0.12; } .photo-panel.ghost:hover { opacity: 1; }
-#hud.photo .hud-top, #hud.photo .hud-bottom, #hud.photo .info-panel, #hud.photo .ship-hud, #hud.photo .travel-hud, #hud.photo .debug-panel, #hud.photo .didyouknow { opacity: 0; pointer-events: none; }
+#hud.photo .hud-top, #hud.photo .hud-bottom, #hud.photo .info-panel, #hud.photo .info-tab, #hud.photo .ship-hud, #hud.photo .travel-hud, #hud.photo .debug-panel, #hud.photo .didyouknow { opacity: 0; pointer-events: none; }
 #hud.photo .hud-top .top-right { opacity: 1; pointer-events: auto; }

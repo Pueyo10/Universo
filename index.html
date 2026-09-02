@@ -61,10 +61,14 @@
       <aside id="info-panel" class="info-panel" hidden>
         <div class="info-head">
           <div class="info-kind" id="info-kind">PLANET</div>
-          <button class="btn btn-icon info-close" id="info-close" data-i18n-title="close" title="Close (Esc)">×</button>
+          <div class="info-head-btns">
+            <button class="btn btn-icon info-close info-collapse" id="info-collapse" data-i18n-title="collapse" title="Collapse">▾</button>
+            <button class="btn btn-icon info-close" id="info-close" data-i18n-title="close" title="Close (Esc)">×</button>
+          </div>
         </div>
         <h2 class="info-name" id="info-name">Earth</h2>
         <div class="info-sub" id="info-sub"></div>
+        <div class="info-body" id="info-body">
         <div class="info-actions">
           <button class="btn" id="info-focus" data-i18n="focus">Focus</button>
           <button class="btn btn-accent" id="info-travel" data-i18n="travelTo">Travel to</button>
@@ -83,7 +87,9 @@
         <div id="info-science"></div>
         <div class="info-section info-grid" id="info-speedrefs"></div>
         <div class="info-children" id="info-children"></div>
+        </div>
       </aside>
+      <button class="info-tab" id="info-tab" hidden data-i18n-title="showPanel" title="Show panel"><span class="info-tab-arrow">◂</span><span id="info-tab-name"></span></button>
 
       <!-- Bottom -->
       <footer class="hud-bottom">

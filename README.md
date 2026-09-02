@@ -94,7 +94,7 @@ render scale, chunk generation).
 | Time | `Space` pause · `[` `]` slower / faster · `N` now |
 | Toggles | `O` orbits · `L` labels · `C` constellations · `G` grid · `V` real / visual scale · `M` audio |
 | Camera modes | `1` free · `2` orbit · `3` follow · `4` realistic flight · `R` reset · `T` tours |
-| UI | `H` immersive · `F2` photo mode · `F3` stats · `B` database · `K` star map · `P` physics · `Esc` cancel / close |
+| UI | `H` immersive · `F2` photo mode · `F3` stats · `B` database · `K` star map · `P` physics · `Esc` cancel / hide info panel (a side tab brings it back; `▾` folds it to the header) |
 
 ## What is in the box
 

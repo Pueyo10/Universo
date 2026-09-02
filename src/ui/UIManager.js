@@ -98,7 +98,11 @@ export class UIManager {
     $('btn-hide-ui').addEventListener('click', () => this.toggleUI());
     $('btn-settings').addEventListener('click', () => { const p = $('settings-panel'); p.hidden = !p.hidden; $('help-panel').hidden = true; });
     $('btn-help').addEventListener('click', () => { const p = $('help-panel'); p.hidden = !p.hidden; $('settings-panel').hidden = true; });
-    $('info-close').addEventListener('click', () => this.selection.select(null));
+    $('info-close').addEventListener('click', () => this.hideInfo());
+    $('info-tab').addEventListener('click', () => { this._infoHiddenFor = null; if (this.selected) this.showInfo(this.selected); });
+    $('info-collapse').addEventListener('click', () => this.setInfoCollapsed(!this._infoCollapsed));
+    try { this._infoCollapsed = localStorage.getItem('universo.infoCollapsed') === '1'; } catch (e) { this._infoCollapsed = false; }
+    this.setInfoCollapsed(this._infoCollapsed, false);
     $('info-focus').addEventListener('click', () => this.focus(this.selected));
     $('info-travel').addEventListener('click', () => this.travelTo(this.selected));
     $('info-follow').addEventListener('click', () => this.follow(this.selected));
@@ -203,6 +207,7 @@ export class UIManager {
         case 'Escape':
           if (this.cameraCtl.travel) { this.cameraCtl.cancelTravel(); this.toast(t('tCancelled')); }
           else if (!$('settings-panel').hidden || !$('help-panel').hidden || !$('science-panel').hidden || !$('tour-menu').hidden || !$('database').hidden) { $('settings-panel').hidden = true; $('help-panel').hidden = true; $('science-panel').hidden = true; $('tour-menu').hidden = true; $('database').hidden = true; }
+          else if (this.selected && !$('info-panel').hidden && !(this.ctx.tour && this.ctx.tour.active) && !(this.universe.supernova && this.universe.supernova.active)) this.hideInfo();
           else bus.emit('escape');
           break;
       }
@@ -311,11 +316,27 @@ export class UIManager {
   }
 
   // ------------------------------------------------------------- info panel
+  hideInfo() {
+    // Hide the data panel but keep the selection: a small tab lets the user pull it back out.
+    if (!this.selected) return;
+    this._infoHiddenFor = this.selected;
+    $('info-panel').hidden = true;
+    const tab = $('info-tab'); $('info-tab-name').textContent = i18n.name(this.selected); tab.hidden = false;
+  }
+  setInfoCollapsed(v, persist = true) {
+    this._infoCollapsed = !!v;
+    $('info-panel').classList.toggle('collapsed', this._infoCollapsed);
+    const b = $('info-collapse'); b.title = t(this._infoCollapsed ? 'expand' : 'collapse'); b.dataset.i18nTitle = this._infoCollapsed ? 'expand' : 'collapse';
+    if (persist) { try { localStorage.setItem('universo.infoCollapsed', this._infoCollapsed ? '1' : '0'); } catch (e) { /* private mode */ } }
+  }
   showInfo(o) {
     this.selected = o;
-    const panel = $('info-panel');
-    if (!o) { panel.hidden = true; return; }
-    panel.hidden = false;
+    const panel = $('info-panel'); const tab = $('info-tab');
+    if (!o) { panel.hidden = true; tab.hidden = true; this._infoHiddenFor = null; return; }
+    if (this._infoHiddenFor && this._infoHiddenFor !== o) this._infoHiddenFor = null;
+    const keepHidden = this._infoHiddenFor === o;
+    panel.hidden = keepHidden; tab.hidden = !keepHidden;
+    $('info-tab-name').textContent = i18n.name(o);
     const prov = o.provenance || (o.procedural || (o.id && (o.id.startsWith('pstar-') || o.id.startsWith('pneb-') || o.id.includes('-p') && o.parent && o.parent.kind === 'star')) ? 'procedural' : 'observed');
     $('info-kind').innerHTML = `${esc(i18n.kindLabel(o).toUpperCase())}<span class="info-badge ${prov}">${esc(t('prov' + prov.charAt(0).toUpperCase() + prov.slice(1)))}</span>`;
     $('info-name').textContent = i18n.name(o);
