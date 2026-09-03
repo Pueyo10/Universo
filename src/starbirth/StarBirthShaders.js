@@ -387,3 +387,39 @@ export const ringFrag = /* glsl */`
     gl_FragColor = vec4(uColor * a, a);
   }
 `;
+
+// ------------------------------------------------------------------ planetary nebula shell (life stages)
+export const pnVert = /* glsl */`
+  varying vec3 vN; varying vec3 vPos; varying vec3 vView;
+  ${LOGDEPTH_PARS_VERT}
+  void main() {
+    vN = normalMatrix * normal; vPos = position;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vView = -mv.xyz;
+    gl_Position = projectionMatrix * mv;
+    ${LOGDEPTH_VERT}
+  }
+`;
+export const pnFrag = /* glsl */`
+  precision highp float;
+  varying vec3 vN; varying vec3 vPos; varying vec3 vView;
+  uniform float uTime, uA, uAge;
+  uniform vec3 uStarColor;
+  ${HASH}
+  ${VALUE_NOISE3D}
+  ${LOGDEPTH_PARS_FRAG}
+  void main() {
+    ${LOGDEPTH_FRAG}
+    vec3 p = normalize(vPos);
+    float mu = abs(dot(normalize(vN), normalize(vView)));
+    float rim = pow(1.0 - mu, 1.6);
+    float n = vfbm(p * 3.5 + uTime * 0.02, 4);
+    float fil = pow(max(1.0 - abs(vfbm(p * 7.0 + 11.0, 3) * 2.0 - 1.0), 0.0), 3.0);
+    // bipolar waist: denser toward the equator, thinner along the axis (the disc shaped the outflow)
+    float waist = 0.55 + 0.45 * (1.0 - abs(p.y));
+    vec3 teal = vec3(0.35, 0.95, 0.75), red = vec3(1.0, 0.36, 0.28), blue = vec3(0.55, 0.7, 1.0);
+    vec3 col = mix(teal, red, smoothstep(0.45, 0.8, n)) * (0.6 + 0.8 * fil) + blue * rim * 0.4;
+    float a = (0.12 + 0.88 * rim) * (0.35 + 0.65 * n) * waist * uA;
+    gl_FragColor = vec4(col * a * 1.3, a);
+  }
+`;

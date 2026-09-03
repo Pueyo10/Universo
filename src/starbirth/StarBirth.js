@@ -4,8 +4,10 @@ import { bus } from '../core/EventBus.js';
 import { StarBody } from '../solar/Sun.js';
 import { CAM_MODE } from '../camera/CameraController.js';
 import { i18n, t } from '../i18n/index.js';
-import { MASSES, PHASES, PHASE_SECONDS, EVENTS, STRUCTS, TOUR, TOUR_END_U, fmtYears } from './StarBirthData.js';
+import { MASSES, PHASES, PHASE_SECONDS, EVENTS, EVENTS_TRACK, STRUCTS, TOUR, TOUR_END_U, U_MAX, fmtYears, phaseFor } from './StarBirthData.js';
 import * as SH from './StarBirthShaders.js';
+import { DustSim, simPtsVert } from './StarBirthGPU.js';
+const COOL_YR = { giant: 1e10, supernova: 1e6, dwarf: 1e11, brown: 1e11 };
 
 // STAR FORMATION — an interactive, time-compressed simulation of a molecular
 // cloud core collapsing into a star: cloud → collapse → protostar → disc →
@@ -60,7 +62,7 @@ export class StarBirth {
     this.ctx = ctx; this.engine = ctx.engine; this.registry = ctx.registry; this.cameraCtl = ctx.cameraCtl; this.time = ctx.time;
     this.active = false; this.u = 0; this.speed = 1; this.paused = false; this.mode = 'normal'; this.layer = 0; this.tour = false;
     this.rot = 0; this.jetClock = 0; this.simT = 0;
-    this._flash = 0; this._shake = 0; this._ignited = false; this._eventIdx = -1; this._phase = -1; this._ringT = 99;
+    this._flash = 0; this._shake = 0; this._ignited = false; this._eventIdx = -1; this._phase = -1; this._ringT = 99; this._snStarted = false; this._simSyncAt = -1;
     this.m = MASSES.solar; this.massKey = 'solar';
     // site: in the Orion star-forming complex, ~30 ly from M42 (which then fills the sky as a backdrop)
     const orion = radecToVector(83.82, -5.39).multiplyScalar(1344 * LY);
@@ -126,6 +128,13 @@ export class StarBirth {
       this.dustMat = new THREE.ShaderMaterial({ uniforms: { uCollapse: { value: 0 }, uRot: { value: 0 }, uTime: { value: 0 }, uPxPerUnit: { value: 800 }, uWorldScale: { value: 1 }, uPointSize: { value: 0.007 }, uStarLum: { value: 0 }, uSci: { value: 0 }, uDisperse: { value: 0 }, uFade: { value: 1 }, uDiskR: { value: 0.009 }, uStarColor: { value: new THREE.Color(1, 0.8, 0.6) } }, vertexShader: SH.dustVert, fragmentShader: SH.ptsFrag, ...add });
       this.dust = new THREE.Points(geo, this.dustMat); this.dust.renderOrder = 61; this.dust.frustumCulled = false; this.gDust.add(this.dust);
     }
+    // --- GPU particle dynamics (real infall, spin-up, disc formation, accretion); the analytic dust is the fallback
+    this.sim = new DustSim(this.engine.renderer, Math.round(65536 * Math.min(mul, 1)));
+    if (this.sim.ok) {
+      this.simMat = new THREE.ShaderMaterial({ uniforms: { tPos: { value: null }, tVel: { value: null }, uPxPerUnit: { value: 800 }, uWorldScale: { value: 1 }, uPointSize: { value: 0.0075 }, uStarLum: { value: 0 }, uSci: { value: 0 }, uFade: { value: 1 }, uRdisk: { value: 0.009 }, uStarColor: { value: new THREE.Color(1, 0.8, 0.6) } }, vertexShader: simPtsVert, fragmentShader: SH.ptsFrag, ...add });
+      this.simPts = new THREE.Points(this.sim.makeGeometry(), this.simMat); this.simPts.renderOrder = 61; this.simPts.frustumCulled = false; this.gDust.add(this.simPts);
+      this.dust.visible = false;
+    }
     // --- sibling protostars (sprites in the dust group)
     this.sibTex = radialTexture('rgba(255,245,225,1)', 'rgba(255,200,150,0.5)', 0.18);
     this.sibs = SIBLINGS.map(p => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.sibTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 })); s.position.copy(p); s.scale.setScalar(0.035); s.renderOrder = 70; this.gDust.add(s); return s; });
@@ -168,6 +177,8 @@ export class StarBirth {
     // --- the star (photosphere, chromosphere, corona) + glow sprites
     this.star = new StarBody({ radius: 1, temp: 3600, intensity: 2.6 });
     this.gStar.add(this.star.group);
+    this.pnMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 }, uA: { value: 0 }, uAge: { value: 0 }, uStarColor: { value: new THREE.Color(1, 1, 1) } }, vertexShader: SH.pnVert, fragmentShader: SH.pnFrag, ...prem, side: THREE.DoubleSide });
+    this.pn = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 4), this.pnMat); this.pn.renderOrder = 66; this.pn.visible = false; this.pn.frustumCulled = false; this.gFx.add(this.pn);
     this.glowTex = radialTexture();
     this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 })); this.glow.renderOrder = 72; this.gFx.add(this.glow);
     this.glowCore = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 })); this.glowCore.renderOrder = 73; this.gFx.add(this.glowCore);
@@ -240,10 +251,11 @@ export class StarBirth {
     };
     this.subs = [];
     this.subs.push(mk('sb-core', 'core', { getPosition(out) { return out.copy(self.site); }, get radius() { return self.Sc * 0.3; }, labelVisible: () => vis.core(), get pickable() { return vis.core(); }, labelAlpha: d => clamp((d - self.Sc * 0.3) / (self.Sc * 0.4), 0, 1) }));
+    const starKey = () => { const u = self.u, tr = self.m.track; if (tr === 'brown') return u >= 5.85 ? 'bd' : 'star'; if (u < 5.85) return 'star'; if (u < 7.35) return 'starMS'; if (u < 8.0) return tr === 'supernova' ? 'supergiant' : tr === 'dwarf' ? 'starMS' : 'giant'; if (tr === 'supernova') return 'ns'; if (tr === 'dwarf') return u < 9.0 ? 'starMS' : 'wd'; return 'wd'; };
     this.subs.push(this.starObj = mk('sb-star', 'star', {
       kind: 'star', procedural: true, color: '#fff1dc',
-      get name() { return self.u >= 5.85 ? STRUCTS.starMS.name.en : STRUCTS.star.name.en; }, get description() { return self.u >= 5.85 ? STRUCTS.starMS.desc.en : STRUCTS.star.desc.en; },
-      i18n: { es: { get name() { return self.u >= 5.85 ? STRUCTS.starMS.name.es : STRUCTS.star.name.es; }, get description() { return self.u >= 5.85 ? STRUCTS.starMS.desc.es : STRUCTS.star.desc.es; }, data: {} } },
+      get name() { return STRUCTS[starKey()].name.en; }, get description() { return STRUCTS[starKey()].desc.en; },
+      i18n: { es: { get name() { return STRUCTS[starKey()].name.es; }, get description() { return STRUCTS[starKey()].desc.es; }, data: {} } },
       getPosition(out) { return out.copy(self.site); }, get radius() { return self.P ? Math.max(self.P.R, 1) : 1; },
       get lum() { return self.P && self.u >= 6 && self.m.lumSun > 20000 ? self.m.lumSun : undefined; }, get temp() { return self.P ? self.P.T : 3000; },
       labelVisible: d => vis.star() && d < self.Sd * 12, get pickable() { return vis.star(); }, data: {},
@@ -264,20 +276,41 @@ export class StarBirth {
     this.diskMat.uniforms.uInnerR.value = Math.max(0.0015, (m.radiusSun * RSUN * 3) / this.Sd);
     this.cloudMat.uniforms.uSeed.value = key === 'low' ? 5.3 : key === 'massive' ? 9.1 : 3.7;
     this.dustMat.uniforms.uDiskR.value = this.Sd / this.Sc;
-    // smooth physical tracks (radius, temperature, luminosity, core state) — C1-continuous across every stage boundary
-    const Rp = m.protoRadiusSun, Rms = m.radiusSun;
-    this.curves = {
-      R: logCurve([[1.45, 0.04 * Rp], [1.9, 0.55 * Rp], [2.4, Rp], [3.2, 0.92 * Rp], [4.6, lerp(Rp, Rms * 1.5, 0.6)], [5.85, Rms * 1.45], [6.4, Rms], [7.1, Rms]]),
-      T: logCurve([[1.45, m.protoTemp * 0.7], [2.4, m.protoTemp * 0.95], [5.4, m.protoTemp * 1.1], [5.85, lerp(m.protoTemp * 1.1, m.tempMS, 0.35)], [6.35, m.tempMS], [7.1, m.tempMS]]),
-      L: logCurve([[1.45, m.protoLum * 0.08], [2.4, m.protoLum], [3.2, m.protoLum * 0.9], [5.5, m.protoLum * 0.45], [5.85, lerp(m.protoLum * 0.45, m.lumSun, 0.5)], [6.3, m.lumSun], [7.1, m.lumSun]]),
-      coreT: logCurve([[0, 10], [1, 12], [1.8, 2000], [2.2, 1e5], [2.6, 1e6], [5.85, 1e7], [6.4, m.coreTempMS], [7.1, m.coreTempMS]]),
-      coreDens: logCurve([[0, 3e-20], [1, 3e-19], [1.8, 1e-13], [2.2, 1e-3], [3, 1e-2], [5.85, 20], [6.4, m.coreDens], [7.1, m.coreDens]]),
+    if (this.sim.ok) { this.simMat.uniforms.uWorldScale.value = this.Sc; this.simMat.uniforms.uRdisk.value = this.Sd / this.Sc; }
+    // smooth physical tracks (radius, temperature, luminosity, core state) — C1-continuous across every stage boundary,
+    // formation (u ≤ 7.1) followed by the track of this mass: giant → planetary nebula → white dwarf, supergiant → supernova →
+    // neutron star, red-dwarf endurance → blue dwarf → helium white dwarf, or a brown dwarf that never ignites and just cools
+    const Rp = m.protoRadiusSun, Rms = m.radiusSun, tr = m.track;
+    const form = {
+      R: [[1.45, 0.04 * Rp], [1.9, 0.55 * Rp], [2.4, Rp], [3.2, 0.92 * Rp], [4.6, lerp(Rp, Rms * 1.5, 0.6)], [5.85, Rms * 1.45], [6.4, Rms], [7.1, Rms]],
+      T: [[1.45, m.protoTemp * 0.7], [2.4, m.protoTemp * 0.95], [5.4, m.protoTemp * 1.1], [5.85, lerp(m.protoTemp * 1.1, m.tempMS, 0.35)], [6.35, m.tempMS], [7.1, m.tempMS]],
+      L: [[1.45, m.protoLum * 0.08], [2.4, m.protoLum], [3.2, m.protoLum * 0.9], [5.5, m.protoLum * 0.45], [5.85, lerp(m.protoLum * 0.45, m.lumSun, 0.5)], [6.3, m.lumSun], [7.1, m.lumSun]],
+      coreT: [[0, 10], [1, 12], [1.8, 2000], [2.2, 1e5], [2.6, 1e6], [5.85, 1e7], [6.4, m.coreTempMS], [7.1, m.coreTempMS]],
+      coreDens: [[0, 3e-20], [1, 3e-19], [1.8, 1e-13], [2.2, 1e-3], [3, 1e-2], [5.85, 20], [6.4, m.coreDens], [7.1, m.coreDens]],
     };
+    if (tr === 'brown') {
+      form.R = [[1.45, 0.04 * Rp], [1.9, 0.55 * Rp], [2.4, Rp], [3.2, 0.9 * Rp], [4.6, 0.5 * Rp], [5.85, 0.3], [6.4, 0.14], [7.1, 0.1]];
+      form.T = [[1.45, m.protoTemp * 0.7], [2.4, m.protoTemp * 0.95], [5.4, m.protoTemp * 1.05], [5.85, m.protoTemp], [6.4, 1800], [7.1, 1500]];
+      form.L = [[1.45, m.protoLum * 0.08], [2.4, m.protoLum], [3.2, m.protoLum * 0.9], [5.5, m.protoLum * 0.3], [5.85, 0.01], [6.4, 1e-4], [7.1, 3e-5]];
+      form.coreT = [[0, 10], [1, 12], [1.8, 2000], [2.2, 1e5], [2.6, 1e6], [5.85, 2.5e6], [6.4, 2.5e6], [7.1, 2e6]];
+      form.coreDens = [[0, 3e-20], [1, 3e-19], [1.8, 1e-13], [2.2, 1e-3], [3, 1e-2], [5.85, 50], [6.4, 300], [7.1, 400]];
+    }
+    const life = {
+      giant: { R: [[7.35, 1.4 * Rms], [7.6, 12], [7.85, 120], [7.98, 170], [8.05, 100], [8.2, 0.5], [8.35, 0.015], [10.1, 0.013]], T: [[7.35, 5600], [7.6, 4600], [7.85, 3400], [7.98, 3200], [8.08, 8000], [8.25, 60000], [8.4, 100000], [9.0, 60000], [10.1, 20000]], L: [[7.35, 2], [7.6, 200], [7.85, 2500], [7.98, 3500], [8.08, 4000], [8.35, 200], [8.7, 1], [9.0, 0.1], [10.1, 0.005]], coreT: [[7.6, 3e7], [7.8, 1e8], [8.35, 1e8], [10.1, 5e6]], coreDens: [[7.85, 1e5], [8.35, 1e6], [10.1, 1e6]] },
+      supernova: { R: [[7.4, 8], [7.6, 80], [7.85, 550], [7.99, 620], [8.0, 620], [8.03, 1.4e-5], [10.1, 1.4e-5]], T: [[7.4, 26000], [7.6, 9000], [7.85, 3600], [7.99, 3500], [8.03, 1e6], [10.1, 5e5]], L: [[7.6, 50000], [7.85, 70000], [7.99, 80000], [8.0, 80000], [8.03, 0.3], [10.1, 0.05]], coreT: [[7.5, 2e8], [7.85, 1e9], [7.99, 5e9], [8.03, 1e11], [10.1, 1e9]], coreDens: [[7.85, 1e6], [7.99, 1e9], [8.03, 5e14], [10.1, 5e14]] },
+      dwarf: { R: [[7.9, 0.27], [8.4, 0.33], [8.9, 0.3], [9.1, 0.02], [10.1, 0.018]], T: [[7.9, 3600], [8.4, 5500], [8.9, 6500], [9.1, 20000], [10.1, 5000]], L: [[7.9, 0.01], [8.4, 0.05], [8.9, 0.06], [9.1, 0.01], [10.1, 1e-4]], coreT: [[8.9, 8e6], [10.1, 5e6]], coreDens: [[9.1, 1e5], [10.1, 1e5]] },
+      brown: { R: [[10.1, 0.1]], T: [[8.0, 1100], [9.0, 500], [10.1, 280]], L: [[8.0, 5e-6], [9.0, 3e-7], [10.1, 1e-8]], coreT: [[10.1, 1e6]], coreDens: [[10.1, 500]] },
+    }[tr] || {};
+    const join = k => form[k].concat(life[k] || []);
+    this.curves = { R: logCurve(join('R')), T: logCurve(join('T')), L: logCurve(join('L')), coreT: logCurve(join('coreT')), coreDens: logCurve(join('coreDens')) };
     // guided-tour camera path: monotone splines through the keyframes (log distance, elevation) → no stop-and-go
     const scaleOf = (k, u) => k === 'cloud' ? this.Sc : k === 'disk' ? this.Sd : k === 'jet' ? this.Sj : Math.max(this.curves.R(u) * RSUN, 1);
-    this.tourD = monoCubic(TOUR.map(k => [k.u, Math.log(scaleOf(k.dist[0], k.u) * k.dist[1])]));
+    const distOf = k => (k.distBy && k.distBy[tr]) ? k.distBy[tr] : k.dist;
+    this.tourD = monoCubic(TOUR.map(k => [k.u, Math.log(scaleOf(distOf(k)[0], k.u) * distOf(k)[1])]));
     this.tourPhi = monoCubic(TOUR.map(k => [k.u, k.phi]));
+    if (this._snStarted) { bus.emit('supernova:stop'); this._snStarted = false; }
     this._params();
+    this._simSyncAt = performance.now() + 50;
     bus.emit('starbirth:mass', key);
   }
   setSpeed(s) { if (s <= 0) { this.paused = true; } else { this.speed = s; this.paused = false; } bus.emit('starbirth:speed', this.paused ? 0 : this.speed); }
@@ -285,16 +318,19 @@ export class StarBirth {
   stepSpeed(dir) { const S = [1, 10, 100, 1000]; let i = S.indexOf(this.speed); i = clamp(i + dir, 0, S.length - 1); this.setSpeed(S[i]); }
   setMode(mode) { this.mode = mode; bus.emit('starbirth:mode', mode); }
   setLayer(n) { this.layer = n | 0; }
-  get phase() { return Math.min(Math.floor(this.u), 6); }
+  get phase() { return Math.min(Math.floor(this.u), U_MAX - 1); }
   seek(u) {
-    this.u = clamp(u, 0, 6.999);
+    this.u = clamp(u, 0, U_MAX - 0.001);
     this._ignited = this.u >= 5.85; this._flash = 0; this._shake = 0; this._ringT = 99; this.ring.visible = false;
+    if (this._snStarted && this.u < 8.0) { bus.emit('supernova:stop'); this._snStarted = false; }
+    if (this.u >= 8.0) this._snStarted = this._snStarted || this.m.track !== 'supernova';   // scrubbing past the explosion: no replay on the way
+    this._simSyncAt = performance.now() + 160;   // debounced re-simulation of the particle state (scrubbing fires many seeks)
     this._eventIdx = -1; for (let i = 0; i < EVENTS.length; i++) if (EVENTS[i].u <= this.u) this._eventIdx = i;
     this._phase = this.phase; this._capPhase = -1;
     this._params();
     bus.emit('starbirth:seek', this.u);
   }
-  seekPhase(p) { this.seek(clamp(p, 0, 6) + 0.001); }
+  seekPhase(p) { this.seek(clamp(p, 0, U_MAX - 1) + 0.001); }
 
   // ------------------------------------------------------------- lifecycle
   start(opts = {}) {
@@ -321,6 +357,7 @@ export class StarBirth {
     if (!this.active) return;
     if (this.tour) this.stopTour(false);
     this.active = false; this.paused = true;
+    if (this._snStarted) { bus.emit('supernova:stop'); this._snStarted = false; }
     for (const s of this.subs) this.registry.remove(s.id);
     if (this.cameraCtl.target && this.cameraCtl.target.id && this.cameraCtl.target.id.startsWith('sb-')) this.cameraCtl.setMode(CAM_MODE.ORBIT, this.obj);
     this.engine.bloomBoost = 0; if (this.engine.finalPass.uniforms.uAberration) this.engine.finalPass.uniforms.uAberration.value = this._abBase;
@@ -354,12 +391,16 @@ export class StarBirth {
   }
 
   // ------------------------------------------------------------- physics of the visuals
-  _params() {
-    const u = this.u, m = this.m, C = this.curves;
+  _params() { this.P = this._paramsFor(this.u); }
+  _paramsFor(u) {
+    const m = this.m, C = this.curves, tr = m.track;
     // processes overlap as they do in nature: the disc starts forming while the envelope still falls, jets switch on as soon as
     // disc + protostar exist, the envelope is eaten by accretion long before the wind blows the rest away, ignition is gradual.
-    const collapse = ss(0.9, 2.6, u), starOn = ss(1.45, 2.4, u), diskF = ss(1.9, 3.5, u), clump = ss(3.0, 4.8, u);
-    const jetF = ss(2.5, 4.3, u) * (1 - ss(5.8, 6.7, u)), cavity = ss(3.0, 5.6, u), ignite = ss(5.55, 6.15, u);
+    const collapse = ss(0.9, 2.6, u), starOn = ss(1.45, 2.4, u), diskF = ss(1.9, 3.5, u) * (1 - ss(7.0, 8.0, u)), clump = ss(3.0, 4.8, u);
+    const jetF = ss(2.5, 4.3, u) * (1 - ss(5.8, 6.7, u)), cavity = ss(3.0, 5.6, u), ignite = tr === 'brown' ? 0 : ss(5.55, 6.15, u);
+    // life stages: the natal cloud is long gone; giants blow winds; the envelope is shed as a planetary nebula (Sun-like) or in a supernova
+    const cloudGone = ss(7.0, 7.6, u), giant = ss(7.3, 7.95, u), wind2 = (tr === 'giant' ? 1 : tr === 'supernova' ? 0.6 : 0.2) * ss(7.5, 8.3, u);
+    const pn = tr === 'giant' ? ss(8.0, 8.15, u) * (1 - ss(9.5, 9.98, u)) : 0, pnR = ss(8.0, 9.98, u);
     const disperse = 0.35 * ss(4.4, 6.9, u) + 0.65 * ss(5.7, 6.9, u), gap = ss(6.0, 6.9, u);
     const sib = ss(2.2, 3.8, u) * (1 - 0.5 * disperse);
     const R = Math.max(C.R(u), 1e-4) * RSUN;
@@ -367,14 +408,30 @@ export class StarBirth {
     const L = C.L(u) * (1 + 4 * this._flash);
     const illum = clamp(0.32 * Math.log10(1 + L * 4), 0, 3) * starOn + 0.8 * ss(1.05, 1.9, u) * (1 - starOn);
     const coreT = C.coreT(u), coreDens = C.coreDens(u);
-    const massAcc = m.mass * ss(1.4, 4.8, u);
-    const y = m.years; let age = 0; const p = this.phase, f = u - p;
-    for (let i = 0; i < p && i < 6; i++) age += y[i];
-    age += p < 6 ? f * y[p] : f * m.lifeYr;
-    this.P = { collapse, starOn, diskF, clump, jetF, cavity, ignite, disperse, gap, sib, R, T, L, illum, color: blackbody(T), coreT, coreDens, massAcc, age, flash: this._flash };
+    const lost = tr === 'giant' ? 0.45 * ss(8.0, 8.4, u) : tr === 'supernova' ? 0.9 * ss(8.0, 8.05, u) : tr === 'dwarf' ? 0.2 * ss(9.0, 9.3, u) : 0;
+    const massAcc = m.mass * ss(1.4, 4.8, u) * (1 - lost);
+    const y = m.years; let age = 0; const p = Math.min(Math.floor(u), U_MAX - 1), f = u - p;
+    for (let i = 0; i < p && i < 9; i++) age += y[i];
+    age += p < 9 ? f * y[p] : f * COOL_YR[tr];
+    return { collapse, starOn, diskF, clump, jetF, cavity, ignite, disperse, gap, sib, R, T, L, illum, color: blackbody(T), coreT, coreDens, massAcc, age, flash: this._flash, cloudGone, giant, wind2, pn, pnR };
+  }
+  /** Uniforms for the GPU particle dynamics at a given state (cloud units, u-time). */
+  _simParams(P, u) {
+    const rd = this.Sd / this.Sc, fm = P.massAcc / this.m.mass;
+    return { uTrigger: ss(0.9, 1.5, u), uMstar: Math.max(fm, 0.001), uMcloud: (1 - fm) * (1 - 0.6 * P.disperse) * (1 - P.cloudGone), uDisk: P.diskF, uRdisk: rd,
+      uWind: 3.0 * ss(5.85, 6.6, u) * (1 - ss(7.0, 7.8, u)) + 4.0 * P.wind2, uAccR: Math.max(0.02 * rd, P.R * 2 / this.Sc), uTurb: 0.15 * (1 - ss(0.9, 2.0, u)) + 0.02, uDrag: 6, uSpin: 0.25 };
+  }
+  /** Rebuild the particle state for the current clock: reset, then fast-forward with coarse steps (debounced after seeks). */
+  _simSync() {
+    if (!this.sim.ok) return;
+    this.sim.reset();
+    const target = this.u; if (target <= 0.05) return;
+    const steps = Math.ceil(target / 0.05), h = target / steps;
+    let uu = 0;
+    for (let i = 0; i < steps; i++) { uu += h; const P = this._paramsFor(uu); this.sim.setParams(this._simParams(P, uu)); this.sim.step(h, uu * 10, 2); }
   }
   /** Years of simulated time per real second at the current speed. */
-  get yearsPerSecond() { const p = this.phase; return (p < 6 ? this.m.years[p] : this.m.lifeYr) / this.phaseSecondsAt(this.u) * (this.paused ? 0 : this.speed); }
+  get yearsPerSecond() { const p = this.phase; return (p < 9 ? this.m.years[p] : COOL_YR[this.m.track]) / this.phaseSecondsAt(this.u) * (this.paused ? 0 : this.speed); }
 
   _ignite() {
     this._ignited = true; this._flash = 0.75; this._shake = 0.55; this._ringT = 0; this.ring.visible = true;
@@ -388,7 +445,10 @@ export class StarBirth {
     const show = this.active || d < 60 * this.Sc;
     this.root.visible = show; this.cloudRoot.visible = show;
     if (!show) { this.engine.volActive = false; return; }
+    const u0 = this.u;
     if (this.active && !this.paused) this._advance(dt);
+    if (this._simSyncAt > 0 && performance.now() >= this._simSyncAt) { this._simSyncAt = -1; this._simSync(); }
+    else if (this.sim.ok && this.u > u0) { const P = this._paramsFor(this.u); this.sim.setParams(this._simParams(P, this.u)); this.sim.step(this.u - u0, this.u * 10); }
     this._flash = Math.max(0, this._flash - dt * 0.9); this._shake = Math.max(0, this._shake - dt * 0.7);
     if (this._ringT < 99) this._ringT += dt;
     this._params();
@@ -399,17 +459,18 @@ export class StarBirth {
 
   /** Visual seconds per unit of u, interpolated between stage mid-points so the pace never jumps at a boundary. */
   phaseSecondsAt(u) {
-    const p = Math.min(Math.floor(u), 6), f = u - p;
+    const last = U_MAX - 1, p = Math.min(Math.floor(u), last), f = u - p;
     if (f < 0.5) { if (p === 0) return PHASE_SECONDS[0]; return lerp(PHASE_SECONDS[p - 1], PHASE_SECONDS[p], 0.5 + f); }
-    if (p === 6) return PHASE_SECONDS[6];
+    if (p === last) return PHASE_SECONDS[last];
     return lerp(PHASE_SECONDS[p], PHASE_SECONDS[p + 1], f - 0.5);
   }
   _advance(dt) {
-    this.u = Math.min(this.u + dt * this.speed / this.phaseSecondsAt(this.u), 6.999);
+    this.u = Math.min(this.u + dt * this.speed / this.phaseSecondsAt(this.u), U_MAX - 0.001);
     const k = 0.22 + 0.3 * Math.log10(1 + this.speed);
     this.rot += dt * k; this.jetClock += dt * (0.5 + 0.35 * Math.log10(1 + this.speed)); this.simT += dt;
     if (this.phase !== this._phase) { this._phase = this.phase; bus.emit('starbirth:phase', this._phase); }
-    if (this.u >= 5.85 && !this._ignited) this._ignite();
+    if (this.u >= 5.85 && !this._ignited) { if (this.m.track === 'brown') this._ignited = true; else this._ignite(); }
+    if (this.m.track === 'supernova' && this.u >= 8.0 && !this._snStarted) { this._snStarted = true; this._shake = 1; bus.emit('supernova:start', this.starObj); }
     if (this.tour && this.u >= TOUR_END_U) this.stopTour(true);
   }
 
@@ -421,7 +482,7 @@ export class StarBirth {
     // --- cloud volume
     const rpx = this.Sc / Math.max(d - this.Sc, 1e-6) * pxPerUnit / pr;
     const inside = d < this.Sc;
-    const cloudVis = inside || rpx > 1.2;
+    const cloudVis = (inside || rpx > 1.2) && P.cloudGone < 0.99;
     this.cloud.visible = cloudVis;
     if (cloudVis) {
       const cu = this.cloudMat.uniforms;
@@ -438,26 +499,36 @@ export class StarBirth {
       const budget = { low: 18, medium: 28, high: 40, ultra: 60 }[this.engine.qualityName] || 28;
       const stepsMax = inside ? Math.round(budget * (0.55 + 0.45 * clamp(d / this.Sc, 0, 1))) : budget;
       cu.uSteps.value = Math.round(lerp(8, stepsMax, Math.sqrt(frac)));
-      cu.uFade.value = clamp((rpx - 1.2) / 3, 0, 1);
+      cu.uFade.value = clamp((rpx - 1.2) / 3, 0, 1) * (1 - P.cloudGone);
       cu.uExt.value = 1 - 0.6 * P.disperse;
     }
     this.engine.volActive = cloudVis;
     // --- dust
     const du = this.dustMat.uniforms;
     du.uCollapse.value = P.collapse; du.uRot.value = this.rot; du.uTime.value = t; du.uPxPerUnit.value = pxPerUnit; du.uStarLum.value = P.illum; du.uSci.value = sci; du.uDisperse.value = P.disperse; du.uStarColor.value.copy(P.color);
-    du.uFade.value = clamp((rpx - 0.5) / 4, 0, 1) * (inside ? clamp(d / (this.Sc * 0.02), 0.15, 1) : 1);
-    this.dust.visible = rpx > 0.5 || inside;
+    du.uFade.value = clamp((rpx - 0.5) / 4, 0, 1) * (inside ? clamp(d / (this.Sc * 0.02), 0.15, 1) : 1) * (1 - P.cloudGone);
+    const dustVis = (rpx > 0.5 || inside) && P.cloudGone < 0.99;
+    if (this.sim.ok) {
+      const su = this.simMat.uniforms;
+      su.tPos.value = this.sim.posTexture; su.tVel.value = this.sim.velTexture; su.uPxPerUnit.value = pxPerUnit; su.uStarLum.value = P.illum; su.uSci.value = sci; su.uFade.value = du.uFade.value; su.uStarColor.value.copy(P.color);
+      this.simPts.visible = dustVis; this.dust.visible = false;
+    } else this.dust.visible = dustVis;
     for (let i = 0; i < 3; i++) { this.sibs[i].material.opacity = P.sib * 0.9; this.sibs[i].visible = P.sib > 0.01; }
     // --- disc
     const dd = this.diskMat.uniforms, dp = this.diskPtsMat.uniforms;
     const rpxD = this.Sd / Math.max(d - this.Sd, 1e-6) * pxPerUnit / pr;
     const diskVis = P.diskF > 0.01 && (rpxD > 1.5 || d < this.Sd * 2);
-    this.disk.visible = diskVis; this.diskPts.visible = diskVis;
+    this.disk.visible = diskVis; this.diskPts.visible = diskVis && !this.sim.ok;
     if (diskVis) {
       dd.uTime.value = t; dd.uRot.value = this.rot; dd.uDisk.value = P.diskF; dd.uGap.value = P.gap; dd.uClump.value = P.clump; dd.uStarLum.value = P.illum * (1 + 2 * P.flash); dd.uSci.value = sci; dd.uStarColor.value.copy(P.color);
       dd.uFade.value = clamp((rpxD - 1.5) / 6, 0, 1);
       dp.uRot.value = this.rot; dp.uDisk.value = P.diskF; dp.uGap.value = P.gap; dp.uClump.value = P.clump; dp.uPxPerUnit.value = pxPerUnit; dp.uStarLum.value = P.illum; dp.uSci.value = sci; dp.uStarColor.value.copy(P.color); dp.uFade.value = dd.uFade.value;
     }
+    // planetary nebula: the shed envelope, lit by the hot core (Sun-like track)
+    if (P.pn > 0.005) {
+      const R = this.Sc * (0.012 + 0.32 * P.pnR);
+      this.pn.visible = true; this.pn.scale.setScalar(R); this.pnMat.uniforms.uTime.value = t; this.pnMat.uniforms.uA.value = P.pn * (1 - 0.85 * clamp((R - d) / (R * 0.3), 0, 1)); this.pnMat.uniforms.uStarColor.value.copy(P.color);
+    } else this.pn.visible = false;
     // ignition ring
     if (this._ringT < 6) { const s = 0.02 + 1.6 * Math.pow(this._ringT / 4, 0.7); this.ring.scale.setScalar(s); this.ringMat.uniforms.uA.value = 1.4 * Math.max(0, 1 - this._ringT / 4); this.ringMat.uniforms.uW.value = 0.08 + 0.06 * this._ringT; this.ring.visible = true; } else this.ring.visible = false;
     // --- jets
@@ -544,14 +615,14 @@ export class StarBirth {
     const lang = i18n.lang;
     if (this._capPhase !== this.phase) {
       this._capPhase = this.phase;
-      const ph = PHASES[this.phase];
+      const ph = phaseFor(this.phase, this.m);
       bus.emit('starbirth:caption', { title: ph.title[lang], sub: ph.name[lang], ms: 6500 });
       this._capT = 0;
     }
     let next = this._eventIdx + 1;
     if (next < EVENTS.length && EVENTS[next].u <= this.u) {
       this._eventIdx = next;
-      const ev = EVENTS[next]; const c = ev[lang] || ev.en;
+      const ev = EVENTS[next]; const ov = EVENTS_TRACK[this.m.track] && EVENTS_TRACK[this.m.track][ev.u]; const c = ov ? (ov[lang] || ov.en) : (ev[lang] || ev.en);
       bus.emit('starbirth:caption', { title: c[1], sub: c[0], ms: 7500 });
     }
   }
@@ -560,8 +631,9 @@ export class StarBirth {
     const P = this.P, lang = i18n.lang, es = lang === 'es';
     const kK = v => `${Math.round(v).toLocaleString('en-US')} K`;
     const dens = P.coreDens >= 1 ? `${P.coreDens.toPrecision(2)} g/cm³` : P.coreDens.toExponential(1) + ' g/cm³';
-    const en = { phase: PHASES[this.phase].name.en, age: fmtYears(P.age, 'en'), surfaceTemp: kK(P.T), coreTemp: P.coreT < 1e4 ? kK(P.coreT) : `${(P.coreT / 1e6).toPrecision(2)} million K`, coreDensity: dens, radius: `${(P.R / RSUN).toPrecision(2)} R☉ (${Math.round(P.R * 1000).toLocaleString('en-US')} km)`, luminosity: `${P.L < 0.01 ? P.L.toExponential(1) : P.L.toPrecision(2)} L☉`, massAccreted: `${P.massAcc.toPrecision(2)} M☉` };
-    const esD = { phase: PHASES[this.phase].name.es, age: fmtYears(P.age, 'es'), surfaceTemp: en.surfaceTemp, coreTemp: P.coreT < 1e4 ? kK(P.coreT) : `${(P.coreT / 1e6).toPrecision(2)} millones K`, coreDensity: dens, radius: en.radius, luminosity: en.luminosity, massAccreted: en.massAccreted };
+    const ph = phaseFor(this.phase, this.m);
+    const en = { phase: ph.name.en, age: fmtYears(P.age, 'en'), surfaceTemp: kK(P.T), coreTemp: P.coreT < 1e4 ? kK(P.coreT) : `${(P.coreT / 1e6).toPrecision(2)} million K`, coreDensity: dens, radius: `${(P.R / RSUN).toPrecision(2)} R☉ (${Math.round(P.R * 1000).toLocaleString('en-US')} km)`, luminosity: `${P.L < 0.01 ? P.L.toExponential(1) : P.L.toPrecision(2)} L☉`, massAccreted: `${P.massAcc.toPrecision(2)} M☉` };
+    const esD = { phase: ph.name.es, age: fmtYears(P.age, 'es'), surfaceTemp: en.surfaceTemp, coreTemp: P.coreT < 1e4 ? kK(P.coreT) : `${(P.coreT / 1e6).toPrecision(2)} millones K`, coreDensity: dens, radius: en.radius, luminosity: en.luminosity, massAccreted: en.massAccreted };
     this.starObj.data = en; this.starObj.i18n.es.data = esD;
     this.obj.data = { phase: en.phase, age: en.age, starMass: `${this.m.mass} M☉ (${this.m.name.en})`, coreSize: `${this.m.cloudPc} pc ≈ ${(this.m.cloudPc * 3.26).toPrecision(2)} light-years`, discRadius: `${this.m.diskAU} AU` };
     this.obj.i18n.es.data = { phase: esD.phase, age: esD.age, starMass: `${this.m.mass} M☉ (${this.m.name.es})`, coreSize: `${this.m.cloudPc} pc ≈ ${(this.m.cloudPc * 3.26).toPrecision(2)} años luz`, discRadius: `${this.m.diskAU} UA` };

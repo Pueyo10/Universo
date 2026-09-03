@@ -9,7 +9,7 @@ export const MASSES = {
   low: {
     key: 'low', mass: 0.2, radiusSun: 0.25, tempMS: 3300, lumSun: 0.006, protoTemp: 2800, protoRadiusSun: 1.6, protoLum: 0.3,
     cloudPc: 0.06, diskAU: 80, jet: 0.55, ion: 0, lifeYr: 1e12, coreTempMS: 6e6, coreDens: 500, cno: false,
-    years: [2.5e6, 5e5, 6e5, 4e6, 2e6, 6e8], tIgnite: T('~1 billion years', '~1.000 millones de años'),
+    years: [2.5e6, 5e5, 6e5, 4e6, 2e6, 6e8, 1e12, 5e11, 1e11], tIgnite: T('~1 billion years', '~1.000 millones de años'), track: 'dwarf',
     name: T('Low-mass star', 'Estrella de baja masa'), sub: T('0.2 solar masses · red dwarf', '0,2 masas solares · enana roja'),
     note: T('A red dwarf. It collapses slowly, ignites only after a billion years of contraction, glows dim and red at 3,300 K — and will burn for trillions of years, longer than the universe has existed.',
       'Una enana roja. Colapsa despacio, se enciende tras mil millones de años de contracción, brilla tenue y roja a 3.300 K, y arderá durante billones de años: más de lo que el universo ha existido.'),
@@ -17,15 +17,23 @@ export const MASSES = {
   solar: {
     key: 'solar', mass: 1, radiusSun: 1, tempMS: 5772, lumSun: 1, protoTemp: 3600, protoRadiusSun: 4, protoLum: 12,
     cloudPc: 0.08, diskAU: 150, jet: 1, ion: 0.18, lifeYr: 1e10, coreTempMS: 1.5e7, coreDens: 150, cno: false,
-    years: [1e6, 1.5e5, 3e5, 2e6, 1e6, 4e7], tIgnite: T('~40 million years', '~40 millones de años'),
+    years: [1e6, 1.5e5, 3e5, 2e6, 1e6, 4e7, 1e10, 1.5e9, 2e4], tIgnite: T('~40 million years', '~40 millones de años'), track: 'giant',
     name: T('Sun-like star', 'Estrella tipo Sol'), sub: T('1 solar mass · yellow dwarf', '1 masa solar · enana amarilla'),
     note: T('A Sun. It ignites after some 40 million years of contraction, shines yellow-white at 5,800 K for 10 billion years, then swells into a red giant.',
       'Un Sol. Se enciende tras unos 40 millones de años de contracción, brilla blanco-amarillo a 5.800 K durante 10.000 millones de años y después se hincha en gigante roja.'),
   },
+  brown: {
+    key: 'brown', mass: 0.05, radiusSun: 0.1, tempMS: 1500, lumSun: 3e-5, protoTemp: 2400, protoRadiusSun: 1.2, protoLum: 0.04,
+    cloudPc: 0.035, diskAU: 30, jet: 0.3, ion: 0, lifeYr: 1e13, coreTempMS: 2.5e6, coreDens: 400, cno: false,
+    years: [3e6, 6e5, 8e5, 5e6, 3e6, 1e8, 5e8, 3e9, 5e10], tIgnite: T('never — the core stops at ~3 million K', 'nunca: el núcleo se queda en ~3 millones de K'), track: 'brown',
+    name: T('Brown dwarf', 'Enana marrón'), sub: T('0.05 solar masses · a failed star', '0,05 masas solares · una estrella fallida'),
+    note: T('Below 0.08 solar masses the collapse stops before hydrogen can fuse: after a brief deuterium flame the object simply cools for ever, a Jupiter-sized ember glowing dull red, then only in infrared.',
+      'Por debajo de 0,08 masas solares el colapso se detiene antes de que el hidrógeno pueda fusionarse: tras una breve llama de deuterio, el objeto simplemente se enfría para siempre, una brasa del tamaño de Júpiter que brilla rojo apagado y luego solo en infrarrojo.'),
+  },
   massive: {
     key: 'massive', mass: 15, radiusSun: 5.5, tempMS: 31000, lumSun: 25000, protoTemp: 5200, protoRadiusSun: 28, protoLum: 4000,
     cloudPc: 0.25, diskAU: 400, jet: 1.8, ion: 1, lifeYr: 1.2e7, coreTempMS: 3.2e7, coreDens: 6, cno: true,
-    years: [3e5, 3e4, 5e4, 1e5, 1e5, 1e5], tIgnite: T('~100,000 years', '~100.000 años'),
+    years: [3e5, 3e4, 5e4, 1e5, 1e5, 1e5, 1.2e7, 1e6, 3e3], tIgnite: T('~100,000 years', '~100.000 años'), track: 'supernova',
     name: T('Massive star', 'Estrella masiva'), sub: T('15 solar masses · blue giant', '15 masas solares · gigante azul'),
     note: T('A blue giant. It forms in only 100,000 years and ignites while still accreting, blazes at 31,000 K with the light of 25,000 Suns, ionises its birth cloud into an HII region and dies as a supernova after 12 million years.',
       'Una gigante azul. Se forma en solo 100.000 años y se enciende mientras aún acreta, arde a 31.000 K con la luz de 25.000 soles, ioniza su nube natal en una región HII y muere como supernova a los 12 millones de años.'),
@@ -33,7 +41,8 @@ export const MASSES = {
 };
 
 /** Visual seconds per phase at 1× (phase 6, the main sequence, is open-ended). */
-export const PHASE_SECONDS = [30, 50, 40, 45, 45, 35, 240];
+export const PHASE_SECONDS = [30, 50, 40, 45, 45, 35, 45, 45, 50, 240];
+export const U_MAX = 10;
 
 export const PHASES = [
   {
@@ -99,7 +108,113 @@ export const PHASES = [
       T('The Sun was born this way 4.6 billion years ago, probably with ~1,000 siblings', 'El Sol nació así hace 4.600 millones de años, probablemente con ~1.000 hermanas')],
     stats: (m) => [[T('Surface temperature', 'Temperatura superficial'), `${m.tempMS.toLocaleString('en-US')} K`], [T('Radius', 'Radio'), `${m.radiusSun} R☉ ≈ ${Math.round(m.radiusSun * 695700).toLocaleString('en-US')} km`], [T('Luminosity', 'Luminosidad'), `${m.lumSun} L☉`], [T('Lifetime', 'Vida'), fmtYears(m.lifeYr)], [T('Equilibrium', 'Equilibrio'), T('gravity = pressure', 'gravedad = presión')]],
   },
+  {
+    id: 'giant', name: T('Giant', 'Gigante'), title: T('The star swells', 'La estrella se hincha'),
+    text: T('When the core runs out of hydrogen it contracts and heats, hydrogen keeps burning in a shell around it, and the outer layers balloon outward: a red giant, cooler but far more luminous.', 'Cuando el núcleo agota el hidrógeno se contrae y se calienta, el hidrógeno sigue ardiendo en una capa a su alrededor y las capas exteriores se hinchan: una gigante roja, más fría pero mucho más luminosa.'),
+    points: [T('Radius grows by a factor of 100–200', 'El radio crece 100–200 veces'), T('Helium ignites in the core at 100 million K', 'El helio se enciende en el núcleo a 100 millones de K'), T('Strong winds shed much of the envelope', 'Vientos intensos expulsan gran parte de la envoltura')],
+    stats: (m) => [[T('Radius', 'Radio'), '≈ 150 R☉'], [T('Temperature', 'Temperatura'), '3,300 K'], [T('Luminosity', 'Luminosidad'), '≈ 2,500 L☉'], [T('Duration', 'Duración'), fmtYears(m.years[7])]],
+    variants: {
+      solar: null,
+      massive: {
+        name: T('Supergiant', 'Supergigante'), title: T('A red supergiant', 'Una supergigante roja'),
+        text: T('With its hydrogen spent, the 15-solar-mass star swells into a red supergiant hundreds of times the Sun\'s size, while the core burns helium, carbon, neon, oxygen and silicon in ever faster shells — the last, silicon to iron, lasting only days.', 'Agotado el hidrógeno, la estrella de 15 masas solares se hincha en una supergigante roja cientos de veces mayor que el Sol, mientras el núcleo quema helio, carbono, neón, oxígeno y silicio en capas cada vez más rápidas: la última, silicio a hierro, dura solo días.'),
+        points: [T('Radius: 500–800 R☉ — it would swallow Mars', 'Radio: 500–800 R☉, engulliría a Marte'), T('An onion of burning shells builds an iron core', 'Una cebolla de capas en combustión forma un núcleo de hierro'), T('Iron cannot release energy by fusion: the end is near', 'El hierro no libera energía al fusionarse: el final está cerca')],
+        stats: (m) => [[T('Radius', 'Radio'), '≈ 600 R☉'], [T('Temperature', 'Temperatura'), '3,500 K'], [T('Luminosity', 'Luminosidad'), '≈ 60,000 L☉'], [T('Duration', 'Duración'), fmtYears(m.years[7])]],
+      },
+      low: {
+        name: T('Endurance', 'Resistencia'), title: T('The red dwarf endures', 'La enana roja resiste'),
+        text: T('A red dwarf is fully convective: it stirs all of its hydrogen into the core and burns it slowly for trillions of years. It never becomes a giant. Models predict it will brighten and turn bluish near the end — a "blue dwarf" no one has ever seen, because the universe is not old enough.', 'Una enana roja es totalmente convectiva: mezcla todo su hidrógeno hacia el núcleo y lo quema despacio durante billones de años. Nunca se convierte en gigante. Los modelos predicen que hacia el final se volverá más brillante y azulada, una "enana azul" que nadie ha visto porque el universo aún no es tan viejo.'),
+        points: [T('Lifetime: ~10 trillion years', 'Vida: ~10 billones de años'), T('No red-giant phase: no inert helium core forms', 'Sin fase de gigante roja: no se forma un núcleo inerte de helio'), T('Not one red dwarf has died since the Big Bang', 'Ninguna enana roja ha muerto desde el Big Bang')],
+        stats: (m) => [[T('Radius', 'Radio'), '0.25 → 0.35 R☉'], [T('Temperature', 'Temperatura'), '3,300 → 6,000 K'], [T('Luminosity', 'Luminosidad'), '0.006 → 0.05 L☉'], [T('Duration', 'Duración'), fmtYears(m.years[7])]],
+      },
+      brown: {
+        name: T('Cooling', 'Enfriamiento'), title: T('A slow fade', 'Un lento apagado'),
+        text: T('With no fusion to replace the heat it radiates, the brown dwarf contracts to the size of Jupiter and cools steadily: from red to magenta, then to a glow visible only in the infrared. Clouds of iron and silicate droplets form in its atmosphere.', 'Sin fusión que reponga el calor que irradia, la enana marrón se contrae hasta el tamaño de Júpiter y se enfría sin pausa: de rojo a magenta y luego a un brillo solo visible en infrarrojo. En su atmósfera se forman nubes de gotas de hierro y silicatos.'),
+        points: [T('Radius ≈ 1 Jupiter regardless of mass', 'Radio ≈ 1 Júpiter sea cual sea la masa'), T('Surface temperature falls below 1,000 K', 'La temperatura superficial baja de 1.000 K'), T('Spectral types L, T and Y mark the cooling', 'Los tipos espectrales L, T e Y marcan el enfriamiento')],
+        stats: (m) => [[T('Radius', 'Radio'), '≈ 0.1 R☉'], [T('Temperature', 'Temperatura'), '1,500 → 900 K'], [T('Luminosity', 'Luminosidad'), '10⁻⁵ L☉'], [T('Duration', 'Duración'), fmtYears(m.years[7])]],
+      },
+    },
+  },
+  {
+    id: 'ending', name: T('Ending', 'Final'), title: T('The star sheds its skin', 'La estrella se despoja'),
+    text: T('The bloated envelope is loosely bound: pulsations and winds blow it away in a few thousand years. The exposed core, now 100,000 K, floods the expanding shells with ultraviolet light and makes them glow: a planetary nebula, the Sun\'s own future.', 'La envoltura hinchada está apenas ligada: pulsaciones y vientos la expulsan en unos miles de años. El núcleo expuesto, ahora a 100.000 K, inunda de luz ultravioleta las capas en expansión y las hace brillar: una nebulosa planetaria, el futuro del propio Sol.'),
+    points: [T('Half the star\'s mass returns to the galaxy, enriched in carbon and nitrogen', 'La mitad de la masa de la estrella vuelve a la galaxia, enriquecida en carbono y nitrógeno'), T('The nebula glows for ~10,000 years, then fades', 'La nebulosa brilla ~10.000 años y luego se apaga'), T('Nothing to do with planets: the name is an 18th-century mistake', 'Nada que ver con planetas: el nombre es un error del siglo XVIII')],
+    stats: (m) => [[T('Central star', 'Estrella central'), '100,000 K · 0.02 R☉'], [T('Shell speed', 'Velocidad de la capa'), '20–30 km/s'], [T('Shell size', 'Tamaño de la capa'), '≈ 0.5 ly'], [T('Duration', 'Duración'), fmtYears(m.years[8])]],
+    variants: {
+      solar: null,
+      massive: {
+        name: T('Supernova', 'Supernova'), title: T('Core collapse', 'Colapso del núcleo'),
+        text: T('When the iron core passes 1.4 solar masses it can no longer hold itself up: in a fraction of a second it collapses to a neutron star, the infalling layers bounce off it, and neutrinos blast the star apart. For weeks the explosion outshines its whole galaxy.', 'Cuando el núcleo de hierro supera 1,4 masas solares ya no puede sostenerse: en una fracción de segundo colapsa a estrella de neutrones, las capas que caen rebotan contra ella y los neutrinos despedazan la estrella. Durante semanas la explosión brilla más que toda su galaxia.'),
+        points: [T('99 % of the energy leaves as neutrinos', 'El 99 % de la energía escapa en neutrinos'), T('Ejecta at 10,000 km/s seed space with oxygen, calcium and iron', 'La eyección a 10.000 km/s siembra el espacio de oxígeno, calcio y hierro'), T('The shock will trigger new star formation nearby', 'La onda de choque desencadenará nueva formación estelar cerca')],
+        stats: (m) => [[T('Collapse time', 'Tiempo de colapso'), '< 1 s'], [T('Energy', 'Energía'), '10⁴⁶ J'], [T('Peak luminosity', 'Luminosidad máxima'), '≈ 10⁹ L☉'], [T('Remnant', 'Remanente'), T('neutron star', 'estrella de neutrones')]],
+      },
+      low: {
+        name: T('Blue dwarf', 'Enana azul'), title: T('A last bright breath', 'Un último brillo'),
+        text: T('As its hydrogen finally dwindles, the dwarf contracts and heats to about 6,000 K — bluer and a few times brighter than ever — before fading into a helium white dwarf. This stage is a prediction: it lies ten thousand times further in the future than the age of the universe.', 'Cuando su hidrógeno por fin escasea, la enana se contrae y se calienta hasta unos 6.000 K, más azul y varias veces más brillante que nunca, antes de apagarse como enana blanca de helio. Esta etapa es una predicción: queda diez mil veces más lejos en el futuro que la edad del universo.'),
+        points: [T('Predicted, never observed', 'Predicha, nunca observada'), T('No planetary nebula: too little mass to shed', 'Sin nebulosa planetaria: demasiado poca masa que expulsar'), T('Ends as a helium white dwarf', 'Acaba como enana blanca de helio')],
+        stats: (m) => [[T('Temperature', 'Temperatura'), '≈ 6,000 K'], [T('Luminosity', 'Luminosidad'), '≈ 0.05 L☉'], [T('Duration', 'Duración'), fmtYears(m.years[8])]],
+      },
+      brown: {
+        name: T('Ember', 'Rescoldo'), title: T('Colder than a cup of tea', 'Más fría que una taza de té'),
+        text: T('After billions of years the surface drops below 500 K. Water clouds form; methane and ammonia fill the spectrum. The coolest brown dwarfs found so far are at room temperature.', 'Tras miles de millones de años la superficie baja de 500 K. Se forman nubes de agua; metano y amoníaco llenan el espectro. Las enanas marrones más frías halladas están a temperatura ambiente.'),
+        points: [T('Y dwarfs: 250–500 K', 'Enanas Y: 250–500 K'), T('Detectable only in infrared', 'Detectables solo en infrarrojo'), T('Will keep cooling for as long as the universe lasts', 'Seguirán enfriándose mientras dure el universo')],
+        stats: (m) => [[T('Temperature', 'Temperatura'), '< 500 K'], [T('Luminosity', 'Luminosidad'), '10⁻⁷ L☉'], [T('Duration', 'Duración'), fmtYears(m.years[8])]],
+      },
+    },
+  },
+  {
+    id: 'remnant', name: T('Remnant', 'Remanente'), title: T('A white dwarf', 'Una enana blanca'),
+    text: T('What remains is the old core: an Earth-sized ball of carbon and oxygen with over half the Sun\'s mass, held up not by fusion but by electron pressure. It will shine by stored heat alone, cooling over billions of years toward a black dwarf — none of which exist yet.', 'Lo que queda es el viejo núcleo: una bola de carbono y oxígeno del tamaño de la Tierra con más de la mitad de la masa del Sol, sostenida no por la fusión sino por la presión de los electrones. Brillará solo por el calor almacenado, enfriándose durante miles de millones de años hacia una enana negra, de las que aún no existe ninguna.'),
+    points: [T('Density: a teaspoon weighs a tonne', 'Densidad: una cucharadita pesa una tonelada'), T('Surface gravity 100,000 times Earth\'s', 'Gravedad superficial 100.000 veces la terrestre'), T('Sirius B is the nearest example', 'Sirio B es el ejemplo más cercano')],
+    stats: (m) => [[T('Radius', 'Radio'), '≈ 0.01 R☉ (Earth-sized)'], [T('Mass', 'Masa'), '≈ 0.6 M☉'], [T('Temperature', 'Temperatura'), '100,000 → 4,000 K'], [T('Cooling time', 'Tiempo de enfriamiento'), fmtYears(1e10)]],
+    variants: {
+      solar: null,
+      massive: {
+        name: T('Neutron star', 'Estrella de neutrones'), title: T('A neutron star', 'Una estrella de neutrones'),
+        text: T('The core survives as a neutron star: 1.4 solar masses packed into a city-sized sphere 20 km across, spinning many times a second with a magnetic field a trillion times Earth\'s. Around it the ejecta expand for millennia as a supernova remnant.', 'El núcleo sobrevive como estrella de neutrones: 1,4 masas solares en una esfera de 20 km, del tamaño de una ciudad, que gira muchas veces por segundo con un campo magnético un billón de veces el terrestre. A su alrededor la eyección se expande durante milenios como remanente de supernova.'),
+        points: [T('Density of an atomic nucleus: a sugar cube weighs a billion tonnes', 'Densidad de un núcleo atómico: un terrón de azúcar pesa mil millones de toneladas'), T('Seen as a pulsar if its beams sweep past us', 'Se ve como púlsar si sus haces nos barren'), T('Above ~3 solar masses the core would have become a black hole', 'Por encima de ~3 masas solares el núcleo habría sido un agujero negro')],
+        stats: (m) => [[T('Radius', 'Radio'), '≈ 10 km'], [T('Mass', 'Masa'), '≈ 1.4 M☉'], [T('Temperature', 'Temperatura'), '≈ 10⁶ K'], [T('Spin', 'Giro'), T('up to hundreds of times per second', 'hasta cientos de veces por segundo')]],
+      },
+      low: {
+        name: T('White dwarf', 'Enana blanca'), title: T('A helium white dwarf', 'Una enana blanca de helio'),
+        text: T('The dwarf ends as a small helium white dwarf that cools for ever. By then the universe will be ten thousand times older than it is today.', 'La enana acaba como una pequeña enana blanca de helio que se enfría para siempre. Para entonces el universo será diez mil veces más viejo que hoy.'),
+        points: [T('Mass ≈ 0.2 M☉, no carbon core', 'Masa ≈ 0,2 M☉, sin núcleo de carbono'), T('Predicted, never observed', 'Predicha, nunca observada')],
+        stats: (m) => [[T('Radius', 'Radio'), '≈ 0.02 R☉'], [T('Temperature', 'Temperatura'), '20,000 → 4,000 K'], [T('Cooling time', 'Tiempo de enfriamiento'), fmtYears(1e11)]],
+      },
+      brown: {
+        name: T('Black', 'Negra'), title: T('Fading into the dark', 'Desvaneciéndose en la oscuridad'),
+        text: T('Nothing dramatic ever happens: the brown dwarf keeps cooling, its atmosphere freezing out layer by layer, until it is barely warmer than the space around it.', 'Nunca ocurre nada dramático: la enana marrón sigue enfriándose, su atmósfera se congela capa a capa, hasta quedar apenas más caliente que el espacio que la rodea.'),
+        points: [T('Trillions of years without change', 'Billones de años sin cambios'), T('Its mass stays locked up for the rest of cosmic history', 'Su masa queda atrapada el resto de la historia cósmica')],
+        stats: (m) => [[T('Temperature', 'Temperatura'), '< 300 K'], [T('Radius', 'Radio'), '≈ 0.1 R☉']],
+      },
+    },
+  },
 ];
+
+/** Brown dwarfs never ignite: alternative texts for stages 6 and 7. */
+export const BROWN_OVERRIDES = {
+  5: {
+    name: T('No ignition', 'Sin ignición'), title: T('The fire never comes', 'El fuego nunca llega'),
+    text: T('The core contracts and warms, but at 0.05 solar masses electron degeneracy pressure halts the squeeze at about 3 million kelvin — short of the 10 million needed to fuse hydrogen. Deuterium burns briefly, then the object is on its own.', 'El núcleo se contrae y se calienta, pero con 0,05 masas solares la presión de degeneración de los electrones detiene la compresión a unos 3 millones de kelvin, lejos de los 10 millones necesarios para fusionar hidrógeno. El deuterio arde brevemente y después el objeto queda a su suerte.'),
+    points: [T('The limit is 0.075 solar masses (about 80 Jupiters)', 'El límite son 0,075 masas solares (unos 80 Júpiter)'), T('Degeneracy pressure does not depend on temperature — it stops the collapse for good', 'La presión de degeneración no depende de la temperatura: frena el colapso para siempre'), T('Deuterium fusion (above 13 Jupiters) is the only nuclear fire it will ever know', 'La fusión del deuterio (por encima de 13 Júpiter) es el único fuego nuclear que conocerá')],
+    stats: (m) => [[T('Core temperature', 'Temperatura del núcleo'), '≈ 3 × 10⁶ K'], [T('Needed for hydrogen', 'Necesaria para el hidrógeno'), '10⁷ K'], [T('Support', 'Sostén'), T('electron degeneracy', 'degeneración electrónica')]],
+  },
+  6: {
+    name: T('Brown dwarf', 'Enana marrón'), title: T('A failed star', 'Una estrella fallida'),
+    text: T('Neither star nor planet: a brown dwarf glows dull red at 1,500–2,000 K from the heat of its own contraction. There may be as many of them in the galaxy as there are stars; the nearest, Luhman 16, is only 6.5 light-years away.', 'Ni estrella ni planeta: una enana marrón brilla rojo apagado a 1.500–2.000 K por el calor de su propia contracción. Puede haber tantas en la galaxia como estrellas; la más cercana, Luhman 16, está a solo 6,5 años luz.'),
+    points: [T('Spectral types L and T; lithium survives in its atmosphere', 'Tipos espectrales L y T; el litio sobrevive en su atmósfera'), T('Radius ≈ Jupiter, mass 13–80 Jupiters', 'Radio ≈ Júpiter, masa 13–80 Júpiter'), T('First confirmed in 1995 (Teide 1, Gliese 229B)', 'Confirmadas por primera vez en 1995 (Teide 1, Gliese 229B)')],
+    stats: (m) => [[T('Surface temperature', 'Temperatura superficial'), '≈ 1,500 K'], [T('Radius', 'Radio'), '≈ 0.1 R☉'], [T('Luminosity', 'Luminosidad'), '≈ 3 × 10⁻⁵ L☉'], [T('Lifetime', 'Vida'), T('cools for ever', 'se enfría para siempre')]],
+  },
+};
+
+/** Stage definition for a given mass (variants override the generic stage). */
+export function phaseFor(i, m) {
+  const ph = PHASES[i];
+  if (m && m.track === 'brown' && BROWN_OVERRIDES[i]) return { ...ph, ...BROWN_OVERRIDES[i] };
+  if (ph.variants && m && ph.variants[m.key]) return { ...ph, ...ph.variants[m.key] };
+  return ph;
+}
+
 
 /** Timed explanations (explanatory mode & guided tour), keyed to the simulation clock u ∈ [0, 7). */
 export const EVENTS = [
@@ -116,7 +231,18 @@ export const EVENTS = [
   { u: 5.82, en: ['Ignition', '10 million kelvin: hydrogen fuses into helium.'], es: ['Ignición', '10 millones de kelvin: el hidrógeno se fusiona en helio.'] },
   { u: 6.05, en: ['Hydrostatic equilibrium', 'Pressure out, gravity in — a balance kept for billions of years.'], es: ['Equilibrio hidrostático', 'Presión hacia fuera, gravedad hacia dentro: un equilibrio que dura miles de millones de años.'] },
   { u: 6.35, en: ['The cloud clears', 'Wind and light disperse the envelope; the new star becomes visible.'], es: ['La nube se despeja', 'El viento y la luz dispersan la envoltura; la nueva estrella se hace visible.'] },
+  { u: 7.15, en: ['Hydrogen runs low', 'Billions of years pass; the core slowly fills with helium ash.'], es: ['El hidrógeno escasea', 'Pasan miles de millones de años; el núcleo se llena lentamente de ceniza de helio.'] },
+  { u: 7.5, en: ['Shell burning', 'Hydrogen burns in a shell around the inert core; the star expands.'], es: ['Combustión en capa', 'El hidrógeno arde en una capa en torno al núcleo inerte; la estrella se expande.'] },
+  { u: 7.8, en: ['Helium flash', 'The compressed core ignites helium into carbon at 100 million K.'], es: ['Flash del helio', 'El núcleo comprimido enciende el helio en carbono a 100 millones de K.'] },
+  { u: 8.08, en: ['The envelope goes', 'Winds and pulsations strip the star to its core.'], es: ['La envoltura se va', 'Vientos y pulsaciones desnudan la estrella hasta el núcleo.'] },
+  { u: 9.1, en: ['Only the core remains', 'A hot remnant, cooling for the rest of time.'], es: ['Solo queda el núcleo', 'Un remanente caliente que se enfría el resto del tiempo.'] },
 ];
+/** Per-track replacements for the life-stage events (keyed by event u). */
+export const EVENTS_TRACK = {
+  supernova: { 7.15: { en: ['A short life', 'Only twelve million years on the main sequence: the core burns through its hydrogen a thousand times faster than the Sun.'], es: ['Una vida corta', 'Solo doce millones de años en la secuencia principal: el núcleo quema su hidrógeno mil veces más deprisa que el Sol.'] }, 7.5: { en: ['Supergiant', 'The envelope balloons past the orbit of Mars.'], es: ['Supergigante', 'La envoltura se hincha más allá de la órbita de Marte.'] }, 7.8: { en: ['Onion shells', 'Helium, carbon, neon, oxygen, silicon: each fuel lasts less than the one before.'], es: ['Capas de cebolla', 'Helio, carbono, neón, oxígeno, silicio: cada combustible dura menos que el anterior.'] }, 8.08: { en: ['Core collapse', 'The iron core gives way; the star explodes as a supernova.'], es: ['Colapso del núcleo', 'El núcleo de hierro cede; la estrella estalla como supernova.'] }, 9.1: { en: ['Neutron star', 'A city-sized core of neutrons spins inside the expanding remnant.'], es: ['Estrella de neutrones', 'Un núcleo de neutrones del tamaño de una ciudad gira dentro del remanente en expansión.'] } },
+  dwarf: { 7.15: { en: ['A patient burn', 'Fully convective, the dwarf recycles all its hydrogen into the core.'], es: ['Una combustión paciente', 'Totalmente convectiva, la enana recicla todo su hidrógeno hacia el núcleo.'] }, 7.5: { en: ['Trillions of years', 'Longer than the universe has existed, many times over.'], es: ['Billones de años', 'Más de lo que ha existido el universo, muchas veces.'] }, 7.8: { en: ['Blue dwarf', 'Near the end it heats and brightens — a stage no one has ever observed.'], es: ['Enana azul', 'Cerca del final se calienta y abrillanta: una etapa que nadie ha observado.'] }, 8.08: { en: ['Helium white dwarf', 'The fuel is gone; the dwarf shrinks and cools.'], es: ['Enana blanca de helio', 'Se acabó el combustible; la enana se encoge y se enfría.'] }, 9.1: { en: ['Into the dark', 'Cooling for ever.'], es: ['Hacia la oscuridad', 'Enfriándose para siempre.'] } },
+  brown: { 5.82: { en: ['No ignition', 'The core stalls at three million kelvin: degeneracy pressure wins.'], es: ['Sin ignición', 'El núcleo se detiene en tres millones de kelvin: gana la presión de degeneración.'] }, 6.05: { en: ['A brown dwarf', 'Neither star nor planet, glowing by the heat of its own contraction.'], es: ['Una enana marrón', 'Ni estrella ni planeta, brilla por el calor de su propia contracción.'] }, 7.15: { en: ['Cooling', 'From red to magenta to infrared: the ember fades.'], es: ['Enfriándose', 'De rojo a magenta a infrarrojo: la brasa se apaga.'] }, 7.5: { en: ['Cloud decks', 'Iron and silicate clouds condense in its atmosphere.'], es: ['Cubiertas de nubes', 'Nubes de hierro y silicatos se condensan en su atmósfera.'] }, 7.8: { en: ['Below 1,000 K', 'Methane and water now shape its spectrum.'], es: ['Por debajo de 1.000 K', 'Metano y agua moldean ahora su espectro.'] }, 8.08: { en: ['Room temperature', 'The coolest brown dwarfs known are about as warm as a summer day.'], es: ['Temperatura ambiente', 'Las enanas marrones más frías conocidas están tan calientes como un día de verano.'] }, 9.1: { en: ['For ever', 'Nothing will ever happen to it again.'], es: ['Para siempre', 'Ya nunca le pasará nada.'] } },
+};
 
 export const FACTS = [
   T('Stellar nurseries: the Orion Nebula, 1,344 light-years away, is the closest place where massive stars are forming right now — visible to the naked eye as the middle "star" of Orion\'s sword.', 'Viveros estelares: la nebulosa de Orión, a 1.344 años luz, es el lugar más cercano donde nacen estrellas masivas ahora mismo; se ve a simple vista como la "estrella" central de la espada de Orión.'),
@@ -138,6 +264,12 @@ export const FACTS = [
 export const STRUCTS = {
   core: { name: T('Dense core', 'Núcleo denso'), desc: T('The knot of cold gas that is collapsing. A few solar masses in a tenth of a parsec, held together by its own gravity against thermal pressure, turbulence and magnetic fields.', 'El nudo de gas frío que está colapsando. Unas masas solares en una décima de pársec, unidas por su propia gravedad frente a la presión térmica, la turbulencia y los campos magnéticos.') },
   star: { name: T('Protostar', 'Protoestrella'), desc: T('The stellar core growing at the centre. It shines with the gravitational energy of the gas raining onto it; hydrogen fusion will not start until the core reaches ten million kelvin.', 'El núcleo estelar que crece en el centro. Brilla con la energía gravitatoria del gas que llueve sobre él; la fusión del hidrógeno no empezará hasta que el núcleo alcance diez millones de kelvin.') },
+  giant: { name: T('Red giant', 'Gigante roja'), desc: T('The old star, swollen to a hundred times its former radius after exhausting the hydrogen in its core.', 'La vieja estrella, hinchada hasta cien veces su radio anterior tras agotar el hidrógeno del núcleo.') },
+  supergiant: { name: T('Red supergiant', 'Supergigante roja'), desc: T('A massive star in its last million years, burning heavier and heavier elements in shells around an iron core.', 'Una estrella masiva en su último millón de años, quemando elementos cada vez más pesados en capas alrededor de un núcleo de hierro.') },
+  wd: { name: T('White dwarf', 'Enana blanca'), desc: T('The exposed stellar core: Earth-sized, held up by electron degeneracy pressure, cooling for billions of years.', 'El núcleo estelar expuesto: del tamaño de la Tierra, sostenido por la presión de degeneración electrónica, enfriándose durante miles de millones de años.') },
+  ns: { name: T('Neutron star', 'Estrella de neutrones'), desc: T('The collapsed core of the supernova: 1.4 solar masses in a sphere 20 km across.', 'El núcleo colapsado de la supernova: 1,4 masas solares en una esfera de 20 km.') },
+  bd: { name: T('Brown dwarf', 'Enana marrón'), desc: T('A failed star: too light to fuse hydrogen, it cools for ever from the heat of its own contraction.', 'Una estrella fallida: demasiado ligera para fusionar hidrógeno, se enfría para siempre con el calor de su propia contracción.') },
+  pn: { name: T('Planetary nebula', 'Nebulosa planetaria'), desc: T('The ejected envelope of the dying star, lit by the ultraviolet glare of its hot core.', 'La envoltura expulsada de la estrella moribunda, iluminada por el resplandor ultravioleta de su núcleo caliente.') },
   starMS: { name: T('Young star', 'Estrella joven'), desc: T('A newborn main-sequence star in hydrostatic equilibrium: the pressure of fusion-heated gas balances gravity exactly.', 'Una estrella recién nacida de secuencia principal en equilibrio hidrostático: la presión del gas calentado por la fusión equilibra exactamente la gravedad.') },
   disk: { name: T('Accretion disc', 'Disco de acreción'), desc: T('A rotating disc of gas and dust flattened by its own spin. Friction lets material spiral slowly onto the star; dust grains grow into the seeds of planets.', 'Un disco de gas y polvo aplanado por su propio giro. La fricción deja que el material caiga en espiral lentamente sobre la estrella; los granos de polvo crecen hasta ser semillas de planetas.') },
   jetN: { name: T('Northern jet', 'Chorro norte'), desc: T('A collimated beam of gas launched by twisted magnetic fields at hundreds of km/s. The bright knots are shocks (Herbig–Haro objects) where the jet rams the cloud.', 'Un haz colimado de gas lanzado por campos magnéticos retorcidos a cientos de km/s. Los nudos brillantes son choques (objetos Herbig-Haro) donde el chorro embiste la nube.') },
@@ -164,8 +296,16 @@ export const TOUR = [
   { u: 6.05, dist: ['star', 9], phi: 0.2 },
   { u: 6.35, dist: ['disk', 1.8], phi: 0.4 },
   { u: 6.7, dist: ['cloud', 0.7], phi: 0.3 },
+  { u: 7.05, dist: ['star', 14], phi: 0.25 },
+  { u: 7.4, dist: ['star', 10], phi: 0.2 },
+  { u: 7.8, dist: ['star', 7], phi: 0.28 },
+  { u: 7.98, dist: ['star', 5], phi: 0.22, distBy: { supernova: ['star', 12] } },
+  { u: 8.06, dist: ['star', 9], phi: 0.3, distBy: { supernova: ['cloud', 0.02], dwarf: ['star', 12] } },
+  { u: 8.4, dist: ['cloud', 0.25], phi: 0.32, distBy: { supernova: ['cloud', 0.3], dwarf: ['star', 10], brown: ['star', 8] } },
+  { u: 9.3, dist: ['cloud', 0.5], phi: 0.32, distBy: { supernova: ['cloud', 0.8], dwarf: ['star', 9], brown: ['star', 7] } },
+  { u: 9.9, dist: ['cloud', 0.6], phi: 0.28, distBy: { supernova: ['cloud', 1.2], dwarf: ['star', 9], brown: ['star', 7] } },
 ];
-export const TOUR_END_U = 6.72;
+export const TOUR_END_U = 9.9;
 
 export function fmtYears(y, lang = 'en') {
   const es = lang === 'es';

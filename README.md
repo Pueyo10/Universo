@@ -91,6 +91,8 @@ render scale, chunk generation).
 - **Three masses**: 0.2 M☉ red dwarf, Sun-like, 15 M☉ blue giant (ionises its cloud; its young star qualifies for the supernova simulation).
 - **Guided sequence**: ~5 min spline camera through every scale with captions; `Esc` hands control back. Structures (core, protostar, disc, both jets, sibling protostars) are labelled and selectable.
 - **Rendering**: the cloud is a ray-marched volume in a reduced-resolution layer composited *after* the star layers, so the dark cloud hides the stars behind it (its extinction also dims the embedded protostar; the infrared observatory band sees through it). GPU-driven dust / disc / jet particles, Keplerian disc shader, jet beams with moving knots, StarBody photosphere for the star.
+- **Real particle dynamics** (`src/starbirth/StarBirthGPU.js`): 65k particles integrated on the GPU (ping-pong float textures). Each feels the gravity of the growing protostar plus the enclosed cloud mass, turbulence, and gas drag toward the Keplerian flow near the midplane — so spinning infall hits its centrifugal barrier and settles into a disc by itself; accreted particles re-enter from the envelope. Scrubbing re-simulates the state (debounced fast-forward). The scientific *flow* layer colours them by inward vs. tangential velocity.
+- **The whole life** (stages 8–10, per mass): Sun-like → red giant → planetary nebula (shell shader) → white dwarf; 15 M☉ → red supergiant → core collapse handed to the supernova simulation → neutron star; 0.2 M☉ → trillion-year endurance → predicted blue dwarf → helium white dwarf; 0.05 M☉ brown dwarf that never ignites and cools for ever. All tracks are smooth curves of the same clock; ages, texts, captions and the guided sequence follow the chosen mass.
 
 ## Controls
 
@@ -107,7 +109,8 @@ render scale, chunk generation).
 | Camera modes | `1` free · `2` orbit · `3` follow · `4` realistic flight · `R` reset · `T` tours |
 | UI | `H` immersive · `F2` photo mode · `F3` stats · `B` database · `K` star map · `P` physics · `Esc` cancel / hide info panel (a side tab brings it back; `▾` folds it to the header) |
 | Ship (Flight toggle / `4`) | `W A S D Q E` thrust · `Shift` boost · wheel = throttle · `Space` / `X` brake (match the reference body) · `C` circular orbit · flight assist scales thrust and caps speed with the distance to the nearest world; accelerate time to see real gravity |
-| Star birth | `Space` pause · `[` `]` speed · `Esc` leaves the guided sequence, then the simulation |
+| Star birth | `Space` pause · `[` `]` speed · `←` `→` previous / next stage · `Esc` leaves the guided sequence, then the simulation |
+| Tours | `Space` pause / resume (the flight freezes too) · `←` `→` previous / next stop · on-screen controls at the top · `Esc` stops |
 
 ## What is in the box
 

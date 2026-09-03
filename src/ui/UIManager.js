@@ -112,7 +112,13 @@ export class UIManager {
     $('info-observe').addEventListener('click', () => { if (this.selected) bus.emit('observe', this.selected); });
     $('info-supernova').addEventListener('click', () => { const sn = this.universe.supernova; if (!sn) return; if (sn.active) bus.emit('supernova:stop'); else if (this.selected) { const o = this.selected; bus.emit('supernova:start', o); this.selection.select(o); this.cameraCtl.travelTo(o, { distance: 40, duration: 3, mode: CAM_MODE.ORBIT }); this.toast(t('snStarted'), 5000); } });
     bus.on('tour:menu', () => this.toggleTourMenu());
-    bus.on('tour:begin', () => { $('tour-menu').hidden = true; });
+    bus.on('tour:begin', () => { $('tour-menu').hidden = true; $('tour-hud').hidden = false; this._renderTourHud(); });
+    bus.on('tour:end', () => { $('tour-hud').hidden = true; });
+    bus.on('tour:state', () => this._renderTourHud());
+    $('tour-prev').addEventListener('click', () => bus.emit('tour:prev'));
+    $('tour-next').addEventListener('click', () => bus.emit('tour:next'));
+    $('tour-pause').addEventListener('click', () => bus.emit('tour:pause'));
+    $('tour-stop').addEventListener('click', () => bus.emit('tour:toggle'));
     bus.on('lang', () => this._renderTourMenu());
     const s = this.engine.settings;
     $('set-quality').value = this.engine.qualityMode;
@@ -182,7 +188,13 @@ export class UIManager {
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.focusSearch(); return; }
       const sb = this.universe.starBirth;
-      if (sb && sb.active && (e.code === 'Space' || e.code === 'BracketRight' || e.code === 'BracketLeft')) { e.preventDefault(); if (e.code === 'Space') sb.togglePause(); else sb.stepSpeed(e.code === 'BracketRight' ? 1 : -1); return; }
+      if (sb && sb.active && (e.code === 'Space' || e.code === 'BracketRight' || e.code === 'BracketLeft' || e.code === 'ArrowRight' || e.code === 'ArrowLeft')) {
+        e.preventDefault();
+        if (e.code === 'Space') sb.togglePause(); else if (e.code === 'ArrowRight') sb.seekPhase(sb.phase + 1); else if (e.code === 'ArrowLeft') sb.seekPhase(sb.phase - (sb.u - sb.phase < 0.2 ? 1 : 0)); else sb.stepSpeed(e.code === 'BracketRight' ? 1 : -1);
+        return;
+      }
+      const tour = this.ctx.tour;
+      if (tour && tour.active && (e.code === 'Space' || e.code === 'ArrowRight' || e.code === 'ArrowLeft')) { e.preventDefault(); if (e.code === 'Space') tour.togglePause(); else if (e.code === 'ArrowRight') tour.next(); else tour.prev(); return; }
       switch (e.code) {
         case 'Slash': e.preventDefault(); this.focusSearch(); break;
         case 'Space': e.preventDefault(); if (this.cameraCtl.mode !== CAM_MODE.SHIP) this.time.toggle(); break;
@@ -251,6 +263,12 @@ export class UIManager {
     el.innerHTML = `<div class="sn-phase">${esc(i18n.name(sn.star))} — ${esc(t(sn.phaseKey))}</div><div class="sn-note">${esc(t('snNote'))}</div><div class="sn-bar"><i style="width:${(sn.progress * 100).toFixed(1)}%"></i></div>`;
   }
 
+  _renderTourHud() {
+    const tour = this.ctx.tour; if (!tour || !tour.active) return;
+    const s = tour.stepInfo;
+    $('tour-step').textContent = `${s.i}/${s.n}${s.name ? ' · ' + s.name : ''}`;
+    const pb = $('tour-pause'); pb.textContent = s.paused ? '▶' : '❚❚'; pb.title = t(s.paused ? 'tourResume' : 'tourPause');
+  }
   toggleTourMenu() {
     const p = $('tour-menu');
     p.hidden = !p.hidden;

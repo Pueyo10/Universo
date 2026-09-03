@@ -319,6 +319,8 @@ button { cursor: pointer; }
 .sb-chip.done { color: rgba(223,230,240,0.75); border-color: rgba(255,196,138,0.25); }
 .sb-chip.on { color: #fff; border-color: rgba(255,196,138,0.7); background: rgba(255,196,138,0.14); box-shadow: 0 0 14px rgba(255,196,138,0.2); }
 .sb-chip.on i { color: #ffc48a; }
+.sb-group { width: 100%; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--faint); margin: 4px 0 0; }
+.sb-seg button { padding: 0 8px; }
 .sb-scrub { width: 100%; margin: 12px 0 4px; accent-color: #ffc48a; }
 .sb-time { display: flex; justify-content: space-between; font-size: 11px; color: rgba(223,230,240,0.85); }
 .sb-rate { color: #ffc48a; font-size: 10.5px; letter-spacing: 0.04em; }
@@ -367,5 +369,14 @@ button { cursor: pointer; }
 #btn-starbirth.active { border-color: rgba(255,196,138,0.6); background: rgba(255,196,138,0.12); }
 .tour-item.sb-item { border-color: rgba(255,196,138,0.35); }
 #hud.photo .sb-panel, #hud.photo .sb-hud { opacity: 0; pointer-events: none; }
-#hud.sb-active .caption { bottom: 200px; }
+#hud.sb-active .caption { bottom: 250px; }
+#hud.sb-active .sn-hud { bottom: 192px; }
 @media (max-width: 900px) { .sb-panel { left: 22px; right: 22px; width: auto; top: 176px; max-height: calc(100vh - 356px); } }
+
+/* ---------- tour controls ---------- */
+.tour-hud { position: absolute; left: 50%; top: 74px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid rgba(143,188,255,0.35); border-radius: 999px; background: var(--panel); backdrop-filter: blur(14px); animation: panelIn 0.35s var(--ease); }
+.tour-hud[hidden] { display: none; }
+.tour-hud .tbtn { min-width: 32px; font-size: 12px; color: #fff; }
+.tour-hud .tour-step { font-size: 11px; color: rgba(223,230,240,0.85); padding: 0 10px; white-space: nowrap; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }
+.tour-hud .tour-x { color: #ffb070; }
+#hud.photo .tour-hud { opacity: 0; pointer-events: none; }

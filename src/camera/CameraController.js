@@ -249,6 +249,7 @@ export class CameraController {
 
   _updateTravel(dt) {
     const tr = this.travel;
+    if (this.travelPaused) return;
     tr.t += dt;
     const u = clamp(tr.t / tr.duration, 0, 1);
     const e = easeInOut(u);

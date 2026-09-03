@@ -162,7 +162,7 @@
           <div class="info-head-btns"><button class="btn btn-icon info-close" id="sb-hide" data-i18n-title="collapse" title="Collapse">▾</button><button class="btn btn-icon info-close" id="sb-close" data-i18n-title="sbExit" title="Exit (Esc)">×</button></div>
         </div>
         <div class="sb-phases" id="sb-phases"></div>
-        <input id="sb-scrub" class="sb-scrub" type="range" min="0" max="6.999" step="0.001" value="0">
+        <input id="sb-scrub" class="sb-scrub" type="range" min="0" max="9.999" step="0.001" value="0">
         <div class="sb-time"><span id="sb-age" class="mono"></span><span id="sb-rate" class="sb-rate"></span></div>
         <div class="sb-controls">
           <div class="time-controls" id="sb-speed"><button class="tbtn" data-sp="0" data-i18n-title="pause" title="Pause (Space)">❚❚</button><button class="tbtn active" data-sp="1">1×</button><button class="tbtn" data-sp="10">10×</button><button class="tbtn" data-sp="100">100×</button><button class="tbtn" data-sp="1000">1k×</button></div>
@@ -171,7 +171,7 @@
         <div class="sb-body" id="sb-body">
           <div class="sb-row"><span data-i18n="sbMode">View</span><div class="sb-seg" id="sb-mode"><button data-m="normal" class="on" data-i18n="sbModeNormal">Normal</button><button data-m="sci" data-i18n="sbModeSci">Scientific</button><button data-m="explain" data-i18n="sbModeExplain">Explained</button></div></div>
           <div class="sb-row" id="sb-sci-row" hidden><span data-i18n="sbLayer">Layer</span><select id="sb-layer"><option value="0" data-i18n="sbLayerNone">Structure</option><option value="1" data-i18n="sbLayerDensity">Density</option><option value="2" data-i18n="sbLayerTemp">Temperature</option><option value="3" data-i18n="sbLayerFlow">Flow &amp; rotation</option></select></div>
-          <div class="sb-row"><span data-i18n="sbMass">Star mass</span><div class="sb-seg" id="sb-mass"><button data-mass="low">0.2 M☉</button><button data-mass="solar" class="on">1 M☉</button><button data-mass="massive">15 M☉</button></div></div>
+          <div class="sb-row"><span data-i18n="sbMass">Star mass</span><div class="sb-seg" id="sb-mass"><button data-mass="brown">0.05 M☉</button><button data-mass="low">0.2 M☉</button><button data-mass="solar" class="on">1 M☉</button><button data-mass="massive">15 M☉</button></div></div>
           <div class="sb-mass-note" id="sb-mass-note"></div>
           <div class="row row-btns sb-btns"><button class="btn btn-accent" id="sb-tour">Guided sequence</button><button class="btn" id="sb-free" data-i18n="sbFree">Explore freely</button></div>
           <div class="sb-card" id="sb-card"></div>
@@ -281,6 +281,13 @@
         </div>
       </div>
 
+      <div id="tour-hud" class="tour-hud" hidden>
+        <button class="tbtn" id="tour-prev" data-i18n-title="tourPrev" title="Previous stop (←)">◀</button>
+        <button class="tbtn" id="tour-pause" data-i18n-title="tourPause" title="Pause (Space)">❚❚</button>
+        <button class="tbtn" id="tour-next" data-i18n-title="tourNext" title="Next stop (→)">▶</button>
+        <span class="tour-step mono" id="tour-step"></span>
+        <button class="tbtn tour-x" id="tour-stop" data-i18n-title="tourStop" title="Stop tour (Esc)">✕</button>
+      </div>
       <div id="band-tag" class="band-tag" hidden></div>
       <div id="sn-hud" class="sn-hud" hidden></div>
       <div id="discovery" class="discovery"></div>

@@ -1,7 +1,7 @@
 import { bus } from '../core/EventBus.js';
 import { i18n, t } from '../i18n/index.js';
 import { SUN_RADIUS_KM, KM, clamp } from '../core/Units.js';
-import { PHASES, FACTS, fmtYears } from '../starbirth/StarBirthData.js';
+import { PHASES, FACTS, fmtYears, phaseFor, U_MAX } from '../starbirth/StarBirthData.js';
 
 // Control panel + bottom readout for the star-formation simulation: stage chips,
 // scrub bar, time controls, view modes, mass variants, stage explanations, live
@@ -25,7 +25,7 @@ export class StarBirthPanel {
     bus.on('starbirth:end', () => this.close());
     bus.on('starbirth:phase', () => this.renderPhase());
     bus.on('starbirth:seek', () => this.renderPhase());
-    bus.on('starbirth:mass', () => { this.renderPhase(); this._syncMass(); });
+    bus.on('starbirth:mass', () => { this._renderChips(); this.renderPhase(); this._syncMass(); });
     bus.on('starbirth:speed', () => this._syncSpeed());
     bus.on('starbirth:mode', () => this._syncMode());
     bus.on('starbirth:tour', on => this._syncTour(on));
@@ -50,7 +50,7 @@ export class StarBirthPanel {
     $('sb-mode').querySelectorAll('button').forEach(b => b.addEventListener('click', () => sim.setMode(b.dataset.m)));
     $('sb-mass').querySelectorAll('button').forEach(b => b.addEventListener('click', () => sim.setMass(b.dataset.mass)));
     $('sb-layer').addEventListener('change', e => sim.setLayer(Number(e.target.value)));
-    const sc = $('sb-scrub');
+    const sc = $('sb-scrub'); sc.max = String(U_MAX - 0.001);
     sc.addEventListener('input', () => { this._dragging = true; sim.seek(Number(sc.value)); });
     const done = () => { this._dragging = false; };
     sc.addEventListener('change', done); sc.addEventListener('pointerup', done); sc.addEventListener('blur', done);
@@ -66,12 +66,14 @@ export class StarBirthPanel {
 
   _renderChips() {
     const lang = i18n.lang;
-    $('sb-phases').innerHTML = PHASES.map((p, i) => `<button class="sb-chip" data-p="${i}"><i>${i + 1}</i>${esc(p.name[lang])}</button>`).join('');
+    const m = this.sim.m;
+    const chip = (i) => `<button class="sb-chip" data-p="${i}"><i>${i + 1}</i>${esc(phaseFor(i, m).name[lang])}</button>`;
+    $('sb-phases').innerHTML = `<div class="sb-group">${esc(t('sbGroupForm'))}</div>` + PHASES.slice(0, 7).map((p, i) => chip(i)).join('') + `<div class="sb-group">${esc(t('sbGroupLife'))}</div>` + PHASES.slice(7).map((p, i) => chip(i + 7)).join('');
     $('sb-phases').querySelectorAll('.sb-chip').forEach(b => b.addEventListener('click', () => this.sim.seekPhase(Number(b.dataset.p))));
   }
 
   renderPhase() {
-    const sim = this.sim, lang = i18n.lang, p = sim.phase, ph = PHASES[p], m = sim.m;
+    const sim = this.sim, lang = i18n.lang, p = sim.phase, m = sim.m, ph = phaseFor(p, m);
     $('sb-phases').querySelectorAll('.sb-chip').forEach(b => { const i = Number(b.dataset.p); b.classList.toggle('on', i === p); b.classList.toggle('done', i < p); });
     $('sb-card').innerHTML = `<div class="sb-phase-k">${esc(t('sbPhaseOf', { n: p + 1 }))} · ${esc(ph.name[lang])}</div><h3>${esc(ph.title[lang])}</h3><p>${esc(ph.text[lang])}</p><ul>${ph.points.map(x => `<li>${esc(x[lang])}</li>`).join('')}</ul>`;
     const stats = ph.stats(m).map(([k, v]) => [k[lang] || k, v && typeof v === 'object' ? v[lang] : v]);
@@ -88,7 +90,7 @@ export class StarBirthPanel {
     const lmin = Math.log10(starAU) - 0.4, lmax = Math.log10(cloudAU);
     const bars = items.map(([k, v]) => { const w = clamp((Math.log10(v) - lmin) / (lmax - lmin), 0.03, 1) * 100; return `<div class="sb-bar"><span>${esc(k)}</span><i style="width:${w.toFixed(1)}%"></i><b>${esc(fmtAU(v, lang))}</b></div>`; }).join('');
     const dm = 100 * diskAU / cloudAU, smm = 100 * starAU / cloudAU * 1000;
-    const dur = PHASES.slice(0, 6).map((p, i) => `<div class="sb-dur"><span>${esc(p.name[lang])}</span><b>${esc(fmtYears(m.years[i], lang))}</b></div>`).join('') + `<div class="sb-dur"><span>${esc(PHASES[6].name[lang])}</span><b>${esc(fmtYears(m.lifeYr, lang))}</b></div>`;
+    const dur = m.years.map((y, i) => `<div class="sb-dur"><span>${esc(phaseFor(i, m).name[lang])}</span><b>${esc(fmtYears(y, lang))}</b></div>`).join('');
     $('sb-scale').innerHTML = `<div class="info-section-title">${esc(t('sbScale'))}</div>${bars}<div class="info-note">${esc(t('sbScaleNote', { d: dm.toFixed(1), s: smm < 1 ? smm.toFixed(2) : smm.toFixed(1) }))}</div><div class="info-section-title sb-sec">${esc(t('sbDurations'))}</div>${dur}`;
   }
   _renderFact() { $('sb-fact').innerHTML = `<div class="info-section-title">${esc(t('sbFact'))}</div><div class="sb-fact-text">${esc(FACTS[this._factI][i18n.lang])}</div>`; }
@@ -120,8 +122,9 @@ export class StarBirthPanel {
     ];
     $('sb-stats-live').innerHTML = live.map(([k, v]) => `<div class="ig"><div class="ig-k">${esc(k)}</div><div class="ig-v mono">${esc(v)}</div></div>`).join('');
     if (sim.phase !== this._lastPhase) this.renderPhase();
-    const ph = PHASES[sim.phase]; const prog = (sim.u / 7 * 100).toFixed(1);
-    const hide = this.ui.state.uiHidden; if (this.hud.hidden !== hide) this.hud.hidden = hide;
-    if (!hide) this.hud.innerHTML = `<div class="sb-hud-row"><span class="sb-hud-phase">${sim.phase + 1}/7 · ${esc(ph.name[lang])}</span><span class="sb-hud-age mono">${esc(fmtYears(P.age, lang))}</span><span class="sb-hud-rate">${esc(rate)}</span></div><div class="sb-hud-bar"><i style="width:${prog}%"></i></div>`;
+    const ph = phaseFor(sim.phase, sim.m); const prog = (sim.u / U_MAX * 100).toFixed(1);
+    const hide = this.ui.state.uiHidden || !!this.ui.cameraCtl.travel;   // the travel readout uses the same spot
+    if (this.hud.hidden !== hide) this.hud.hidden = hide;
+    if (!hide) this.hud.innerHTML = `<div class="sb-hud-row"><span class="sb-hud-phase">${sim.phase + 1}/${U_MAX} · ${esc(ph.name[lang])}</span><span class="sb-hud-age mono">${esc(fmtYears(P.age, lang))}</span><span class="sb-hud-rate">${esc(rate)}</span></div><div class="sb-hud-bar"><i style="width:${prog}%"></i></div>`;
   }
 }
