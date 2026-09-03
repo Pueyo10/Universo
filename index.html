@@ -9,12 +9,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%225%22 fill=%22%23fff%22/%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2212%22 fill=%22none%22 stroke=%22%237fb4ff%22 stroke-width=%221.5%22 opacity=%22.7%22/%3E%3C/svg%3E" />
-  <script type="module" crossorigin src="./assets/index-DCRU37wS.js"></script>
+  <script type="module" crossorigin src="./assets/index-BFkTFkS9.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/three.core-CpYT6u8q.js">
   <link rel="modulepreload" crossorigin href="./assets/EventBus-DzLmJ1Bg.js">
-  <link rel="modulepreload" crossorigin href="./assets/Units-C4pAkV58.js">
+  <link rel="modulepreload" crossorigin href="./assets/Units-DAZZQuH0.js">
   <link rel="modulepreload" crossorigin href="./assets/Random-BQY5ImTV.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-DNS7l1qN.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-BTxzM2m7.css">
 </head>
 <body>
   <div id="app">
@@ -42,6 +42,7 @@
           <button id="btn-tour" class="btn btn-accent" data-i18n-title="tourTitle" title="Cinematic Tour (T)">
             <span class="dot"></span> <span data-i18n="tour">Cinematic Tour</span>
           </button>
+          <button id="btn-starbirth" class="btn btn-accent" data-i18n-title="sbBtnT" title="Birth of a star — interactive simulation"><span class="sb-ico">✦</span> <span data-i18n="sbBtn">Star birth</span></button>
           <button id="btn-lang" class="btn btn-icon btn-lang" title="Cambiar a español">ES</button>
           <button id="btn-database" class="btn btn-icon" data-i18n-title="database" title="Cosmic Database (B)">
             <svg viewBox="0 0 24 24" width="15" height="15"><ellipse cx="12" cy="6" rx="8" ry="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
@@ -80,6 +81,7 @@
           <button class="btn" id="info-follow" data-i18n="follow">Follow</button>
           <button class="btn" id="info-observe" data-i18n="observe" title="Auto-cinematic (25 s)">Observe</button>
           <button class="btn" id="info-supernova" data-i18n="supernovaStart" hidden>Simulate supernova</button>
+          <button class="btn btn-accent" id="info-action" hidden></button>
         </div>
         <div class="info-actions info-tools">
           <button class="btn" id="info-bookmark" data-i18n="bookmark" title="Bookmark">☆</button>
@@ -157,6 +159,35 @@
         <div class="row row-btns"><button class="btn" id="photo-pause" data-i18n="pauseTime">Pause / resume time</button><button class="btn" id="photo-hide" data-i18n="photoHide">Hide this panel</button></div>
         <div class="panel-foot" data-i18n="photoNote">Use your browser or OS screenshot tool to capture. H hides everything else.</div>
       </div>
+
+      <!-- Star formation simulation -->
+      <div id="sb-panel" class="panel sb-panel" hidden>
+        <div class="sb-head">
+          <div><div class="panel-title" data-i18n="sbTitle">Birth of a star</div><div class="sb-sub" id="sb-sub"></div></div>
+          <div class="info-head-btns"><button class="btn btn-icon info-close" id="sb-hide" data-i18n-title="collapse" title="Collapse">▾</button><button class="btn btn-icon info-close" id="sb-close" data-i18n-title="sbExit" title="Exit (Esc)">×</button></div>
+        </div>
+        <div class="sb-phases" id="sb-phases"></div>
+        <input id="sb-scrub" class="sb-scrub" type="range" min="0" max="6.999" step="0.001" value="0">
+        <div class="sb-time"><span id="sb-age" class="mono"></span><span id="sb-rate" class="sb-rate"></span></div>
+        <div class="sb-controls">
+          <div class="time-controls" id="sb-speed"><button class="tbtn" data-sp="0" data-i18n-title="pause" title="Pause (Space)">❚❚</button><button class="tbtn active" data-sp="1">1×</button><button class="tbtn" data-sp="10">10×</button><button class="tbtn" data-sp="100">100×</button><button class="tbtn" data-sp="1000">1k×</button></div>
+          <button class="btn btn-icon" id="sb-prev" data-i18n-title="sbPrev" title="Previous stage">◀</button><button class="btn btn-icon" id="sb-next" data-i18n-title="sbNext" title="Next stage">▶</button><button class="btn btn-icon" id="sb-restart" data-i18n-title="sbRestart" title="Restart">↺</button>
+        </div>
+        <div class="sb-body" id="sb-body">
+          <div class="sb-row"><span data-i18n="sbMode">View</span><div class="sb-seg" id="sb-mode"><button data-m="normal" class="on" data-i18n="sbModeNormal">Normal</button><button data-m="sci" data-i18n="sbModeSci">Scientific</button><button data-m="explain" data-i18n="sbModeExplain">Explained</button></div></div>
+          <div class="sb-row" id="sb-sci-row" hidden><span data-i18n="sbLayer">Layer</span><select id="sb-layer"><option value="0" data-i18n="sbLayerNone">Structure</option><option value="1" data-i18n="sbLayerDensity">Density</option><option value="2" data-i18n="sbLayerTemp">Temperature</option><option value="3" data-i18n="sbLayerFlow">Flow &amp; rotation</option></select></div>
+          <div class="sb-row"><span data-i18n="sbMass">Star mass</span><div class="sb-seg" id="sb-mass"><button data-mass="low">0.2 M☉</button><button data-mass="solar" class="on">1 M☉</button><button data-mass="massive">15 M☉</button></div></div>
+          <div class="sb-mass-note" id="sb-mass-note"></div>
+          <div class="row row-btns sb-btns"><button class="btn btn-accent" id="sb-tour">Guided sequence</button><button class="btn" id="sb-free" data-i18n="sbFree">Explore freely</button></div>
+          <div class="sb-card" id="sb-card"></div>
+          <div class="info-grid sb-grid" id="sb-stats-live"></div>
+          <div class="info-grid sb-grid" id="sb-stats-static"></div>
+          <div class="sb-scale" id="sb-scale"></div>
+          <div class="sb-fact" id="sb-fact"></div>
+          <div class="panel-foot" data-i18n="sbNote">Conceptual simulation with compressed time.</div>
+        </div>
+      </div>
+      <div id="sb-hud" class="sb-hud" hidden></div>
 
       <!-- Cosmic database -->
       <div id="database" class="panel database" hidden>
