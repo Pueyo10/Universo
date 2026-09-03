@@ -17,6 +17,12 @@ export class AudioManager {
     bus.on('immersive', v => { this.immersive = v; if (this.master && this.enabled) this.master.gain.setTargetAtTime(v ? 0.5 : this.masterLevel, this.ctx.currentTime, 1.5); });
     // sonification: a pulsar's beam sweeping past us -> a short radio "click" at its real spin period (clearly synthetic)
     bus.on('pulsar:pulse', o => this.pulse(o));
+    // star formation: the score follows the stage; ignition gets a synthetic swell
+    this.sb = { active: false, phase: 0 };
+    bus.on('starbirth:begin', () => { this.sb.active = true; });
+    bus.on('starbirth:end', () => { this.sb.active = false; });
+    bus.on('starbirth:phase', p => { this.sb.phase = p; });
+    bus.on('starbirth:ignite', () => this.ignition());
   }
 
   setEnabled(v) {
@@ -85,6 +91,19 @@ export class AudioManager {
     o1.connect(f); f.connect(g); g.connect(this.master); o1.start(t); o1.stop(t + 0.1);
   }
 
+  /** Ignition swell: a rising sine and a filtered noise burst through the reverb (synthetic, not a recording). */
+  ignition() {
+    if (!this.enabled || !this.ctx || !this.built) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(40, t); o.frequency.exponentialRampToValueAtTime(220, t + 2.5);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 1.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 6);
+    o.connect(g); g.connect(this.master); g.connect(this.reverb); o.start(t); o.stop(t + 6.2);
+    const nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+    const n = ctx.createBufferSource(); n.buffer = nb; const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(400, t); f.frequency.exponentialRampToValueAtTime(4000, t + 1.0); f.frequency.exponentialRampToValueAtTime(300, t + 2.0);
+    const ng = ctx.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.exponentialRampToValueAtTime(0.25, t + 0.8); ng.gain.exponentialRampToValueAtTime(0.0001, t + 2.4);
+    n.connect(f); f.connect(ng); ng.connect(this.master); ng.connect(this.reverb); n.start(t); n.stop(t + 2.5);
+  }
+
   _ping() {
     const ctx = this.ctx; if (!ctx) return;
     const notes = [440, 523.25, 587.33, 659.25, 783.99, 880, 1046.5];
@@ -118,6 +137,12 @@ export class AudioManager {
     this.target.pings = (nearBH ? 0.2 : deep ? 0.9 : nearPlanet ? 0.5 : 0.6) * quiet;
     this.target.shimmer = inNebula ? 1 : 0;
     this.target.sub = nearBH ? 1 : 0;
+    const sbSim = u && u.starBirth;
+    if (sbSim && this.sb.active && cam.position.distanceTo(sbSim.site) < sbSim.Sc * 25) {
+      const p = this.sb.phase;
+      this.target.drone = p <= 1 ? 0.75 : p === 5 ? 0.9 : 0.55; this.target.wind = p === 1 ? 0.5 : p === 4 ? 0.7 : 0.25; this.target.pad = p >= 6 ? 0.95 : 0.6;
+      this.target.pings = p >= 3 ? 0.5 : 0.3; this.target.shimmer = p === 3 || p === 4 ? 0.8 : 0.3; this.target.sub = p === 5 ? 0.9 : p === 1 ? 0.4 : 0;
+    }
     for (const k of Object.keys(this.mix)) this.mix[k] = damp(this.mix[k], this.target[k], 0.8, dt);
     const t = this.ctx.currentTime;
     this.droneGain.gain.setTargetAtTime(this.mix.drone * 0.5, t, 0.3);

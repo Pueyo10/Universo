@@ -9,6 +9,7 @@ import { extraRows, scienceHtml } from './InfoScience.js';
 import { DiscoverySystem } from '../systems/Discovery.js';
 import { Database } from './Database.js';
 import { StarMap } from './StarMap.js';
+import { StarBirthPanel } from './StarBirthPanel.js';
 import { i18n, t } from '../i18n/index.js';
 
 const $ = (id) => document.getElementById(id);
@@ -24,6 +25,7 @@ export class UIManager {
     this.discovery = new DiscoverySystem(ctx, this);
     this.database = new Database(this);
     this.starmap = new StarMap(this);
+    this.starBirth = universe.starBirth ? new StarBirthPanel(this) : null;
     this.selected = null;
     this._t = 0; this._infoT = 0;
     this._v = new THREE.Vector3();
@@ -75,7 +77,7 @@ export class UIManager {
     tog('tog-scale', 'realScale', v => this.toast(v ? t('tRealScale') : t('tVisualScale')));
     tog('tog-audio', 'audio');
     tog('tog-physics', 'physics', v => { $('sci-physics').checked = v; });
-    tog('tog-flight', 'flight', v => { this.cameraCtl.setFlightRealistic(v); $('sci-flight').value = v ? 'real' : 'explore'; this.toast(t(v ? 'tFlightReal' : 'tFlightExplo'), 4000); });
+    tog('tog-flight', 'flight', v => { this.cameraCtl.setFlightRealistic(v); $('sci-flight').value = v ? 'real' : 'explore'; this.toast(t(v ? 'tFlightReal2' : 'tFlightExplo'), 6000); });
     $('btn-science').addEventListener('click', () => { const p = $('science-panel'); p.hidden = !p.hidden; $('help-panel').hidden = true; $('settings-panel').hidden = true; });
     $('sci-flight').addEventListener('change', e => { const v = e.target.value === 'real'; if (this.state.flight !== v) $('tog-flight').click(); });
     $('sci-physics').addEventListener('change', e => { if (this.state.physics !== e.target.checked) $('tog-physics').click(); });
@@ -95,6 +97,7 @@ export class UIManager {
     tog('tog-debug', 'debug', v => { $('debug-panel').hidden = !v; });
     $('btn-reset').addEventListener('click', () => this.resetCamera());
     $('btn-tour').addEventListener('click', () => bus.emit('tour:toggle'));
+    $('btn-starbirth').addEventListener('click', () => { const sb = this.universe.starBirth; if (!sb) return; if (sb.active) { if (this.starBirth.el.hidden) this.starBirth.el.hidden = false; bus.emit('starbirth:focus'); } else bus.emit('starbirth:start', {}); });
     $('btn-hide-ui').addEventListener('click', () => this.toggleUI());
     $('btn-settings').addEventListener('click', () => { const p = $('settings-panel'); p.hidden = !p.hidden; $('help-panel').hidden = true; });
     $('btn-help').addEventListener('click', () => { const p = $('help-panel'); p.hidden = !p.hidden; $('settings-panel').hidden = true; });
@@ -107,7 +110,7 @@ export class UIManager {
     $('info-travel').addEventListener('click', () => this.travelTo(this.selected));
     $('info-follow').addEventListener('click', () => this.follow(this.selected));
     $('info-observe').addEventListener('click', () => { if (this.selected) bus.emit('observe', this.selected); });
-    $('info-supernova').addEventListener('click', () => { const sn = this.universe.supernova; if (!sn) return; if (sn.active) bus.emit('supernova:stop'); else if (this.selected) { bus.emit('supernova:start', this.selected); this.focus(this.selected); } });
+    $('info-supernova').addEventListener('click', () => { const sn = this.universe.supernova; if (!sn) return; if (sn.active) bus.emit('supernova:stop'); else if (this.selected) { const o = this.selected; bus.emit('supernova:start', o); this.selection.select(o); this.cameraCtl.travelTo(o, { distance: 40, duration: 3, mode: CAM_MODE.ORBIT }); this.toast(t('snStarted'), 5000); } });
     bus.on('tour:menu', () => this.toggleTourMenu());
     bus.on('tour:begin', () => { $('tour-menu').hidden = true; });
     bus.on('lang', () => this._renderTourMenu());
@@ -178,9 +181,11 @@ export class UIManager {
       const tag = e.target?.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.focusSearch(); return; }
+      const sb = this.universe.starBirth;
+      if (sb && sb.active && (e.code === 'Space' || e.code === 'BracketRight' || e.code === 'BracketLeft')) { e.preventDefault(); if (e.code === 'Space') sb.togglePause(); else sb.stepSpeed(e.code === 'BracketRight' ? 1 : -1); return; }
       switch (e.code) {
         case 'Slash': e.preventDefault(); this.focusSearch(); break;
-        case 'Space': e.preventDefault(); this.time.toggle(); break;
+        case 'Space': e.preventDefault(); if (this.cameraCtl.mode !== CAM_MODE.SHIP) this.time.toggle(); break;
         case 'BracketRight': this.time.faster(); this.toast(t('tTime', { x: fmtNum(this.time.effectiveSpeed) })); break;
         case 'BracketLeft': this.time.slower(); this.toast(this.time.effectiveSpeed ? t('tTime', { x: fmtNum(this.time.effectiveSpeed) }) : t('tPaused')); break;
         case 'KeyN': this.time.setNow(); this.toast(t('tTimeReset')); break;
@@ -257,8 +262,9 @@ export class UIManager {
     const tours = tour ? tour.tours : {};
     const lang = i18n.lang;
     list.innerHTML = (tour && tour.active ? `<button class="tour-item stop" data-tour="__stop">${esc(t('tourStop'))}</button>` : '') +
+      (this.universe.starBirth ? `<button class="tour-item sb-item" data-tour="__starbirth"><div class="ti-name">✦ ${esc(t('sbTourName'))}</div><div class="ti-desc">${esc(t('sbTourDesc'))}</div><div class="ti-meta">${esc(t('sbTourMeta'))}</div></button>` : '') +
       Object.entries(tours).map(([id, tr]) => `<button class="tour-item" data-tour="${id}"><div class="ti-name">${esc(tr.name[lang] || tr.name.en)}</div><div class="ti-desc">${esc(tr.desc[lang] || tr.desc.en)}</div><div class="ti-meta">${esc(t('tourSteps2', { n: tr.steps.length }))}</div></button>`).join('');
-    list.querySelectorAll('.tour-item').forEach(b => b.addEventListener('click', () => { const id = b.dataset.tour; $('tour-menu').hidden = true; if (id === '__stop') bus.emit('tour:toggle'); else bus.emit('tour:start', id); }));
+    list.querySelectorAll('.tour-item').forEach(b => b.addEventListener('click', () => { const id = b.dataset.tour; $('tour-menu').hidden = true; if (id === '__stop') bus.emit('tour:toggle'); else if (id === '__starbirth') bus.emit('starbirth:start', { tour: true }); else bus.emit('tour:start', id); }));
   }
   /** IMMERSIVE MODE: no HUD, no labels, slower and smoother camera, richer ambient audio, gentler grain. */
   toggleUI() {
@@ -341,6 +347,8 @@ export class UIManager {
     $('info-kind').innerHTML = `${esc(i18n.kindLabel(o).toUpperCase())}<span class="info-badge ${prov}">${esc(t('prov' + prov.charAt(0).toUpperCase() + prov.slice(1)))}</span>`;
     $('info-name').textContent = i18n.name(o);
     $('info-sub').textContent = i18n.text(o, 'subtitle') || '';
+    const ab = $('info-action');
+    if (o.action) { ab.hidden = false; ab.textContent = o.actionLabel ? o.actionLabel() : '▶'; ab.onclick = () => o.action(); } else { ab.hidden = true; ab.onclick = null; }
     $('info-desc').textContent = i18n.text(o, 'description') || '';
     $('info-facts').innerHTML = (i18n.text(o, 'facts') || []).map(f => `<div class="info-fact">${esc(f)}</div>`).join('');
     const ch = $('info-children');
@@ -440,6 +448,7 @@ export class UIManager {
     this.labels.update();
     if ((this._frame = (this._frame || 0) + 1) % 3 === 0) { this._renderShipHud(); this._renderTravelHud(); this._renderSupernovaHud(); }
     this.discovery.update(dt, this.engine.time);
+    if (this.starBirth) this.starBirth.update(dt);
     this.database.update();
     if (this._frame % 2 === 0) this.starmap.update();
     if (this._t > 0.15) {

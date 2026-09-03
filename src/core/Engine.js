@@ -82,6 +82,21 @@ export class Engine {
     this.nebulaComposite.renderOrder = -999;     // right after the sky, before any opaque body
     this.nebulaComposite.visible = false;
     this.scene.add(this.nebulaComposite);
+    // ------ foreground volumetric layer: same reduced resolution, but composited after the star layers, so a
+    // dark cloud can hide the stars behind it (used by the star-formation simulation) ------
+    this.volScene = new THREE.Scene();
+    this.volActive = false;
+    this.volRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
+    this.volComposite = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+      uniforms: { tNebula: { value: this.volRT.texture } },
+      vertexShader: this.nebulaComposite.material.vertexShader, fragmentShader: this.nebulaComposite.material.fragmentShader,
+      transparent: true, depthTest: false, depthWrite: false,
+      blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+    }));
+    this.volComposite.frustumCulled = false;
+    this.volComposite.renderOrder = 39;          // after stars (10–12), before discs / bodies drawn inside the volume
+    this.volComposite.visible = false;
+    this.scene.add(this.volComposite);
 
     // ------ post-processing chain ------
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -154,6 +169,7 @@ export class Engine {
     this.finalPass.setSize(size.x, size.y);
     this.blackHolePass.setSize(size.x, size.y);
     this.nebulaRT.setSize(Math.max(8, Math.round(size.x * this.q.nebulaScale)), Math.max(8, Math.round(size.y * this.q.nebulaScale)));
+    this.volRT.setSize(Math.max(8, Math.round(size.x * this.q.nebulaScale)), Math.max(8, Math.round(size.y * this.q.nebulaScale)));
     bus.emit('resize', w, h);
   }
 
@@ -236,7 +252,7 @@ export class Engine {
   render() {
     this.camera.fov = this.settings.fov * (this.fovMultiplier || 1);
     this.camera.updateProjectionMatrix();
-    this.bloomPass.strength = this.settings.bloom;
+    this.bloomPass.strength = this.settings.bloom + (this.bloomBoost || 0);
     this.finalPass.uniforms.uLens.value = this.settings.lens ? 1 : 0;
     this.finalPass.uniforms.uTime.value = this.time;
     const info = this.renderer.info;
@@ -254,6 +270,16 @@ export class Engine {
       r.setRenderTarget(null);
     }
     this.nebulaComposite.visible = this.nebulaActive;
+    if (this.volActive) {
+      const r = this.renderer;
+      r.setRenderTarget(this.volRT);
+      r.setClearColor(0x000000, 0);
+      r.clear(true, false, false);
+      r.render(this.volScene, this.camera);
+      r.setClearColor(0x000000, 1);
+      r.setRenderTarget(null);
+    }
+    this.volComposite.visible = this.volActive;
     this.composer.render(this.dt);
     this._endGpuQuery(q);
     this.stats.drawCalls = info.render.calls; this.stats.triangles = info.render.triangles; this.stats.points = info.render.points;

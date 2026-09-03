@@ -15,6 +15,7 @@ export async function attachModules(ctx) {
     ['Supernova', async () => { const m = await import('./Supernova.js'); ctx.supernova = new m.SupernovaSim(ctx); ctx.universe.add(ctx.supernova); ctx.universe.supernova = ctx.supernova; }],
     ['Heliosphere', async () => { const m = await import('./Heliosphere.js'); ctx.heliosphere = new m.Heliosphere(ctx, ctx.solar); ctx.universe.add(ctx.heliosphere); ctx.universe.heliosphere = ctx.heliosphere; }],
     ['Observatory', async () => { const m = await import('./Observatory.js'); ctx.observatory = new m.Observatory(ctx); ctx.universe.observatory = ctx.observatory; }],
+    ['Star formation', async () => { const m = await import('../starbirth/StarBirth.js'); ctx.starBirth = new m.StarBirth(ctx); ctx.universe.add(ctx.starBirth); ctx.universe.starBirth = ctx.starBirth; }],
   ];
   let i = 0;
   for (const [name, fn] of steps) {

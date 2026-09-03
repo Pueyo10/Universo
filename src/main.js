@@ -58,7 +58,7 @@ async function boot() {
   bus.on('camera:reset', () => { cameraCtl.cancelTravel(); cameraCtl.setMode('FREE'); cameraCtl.setPose(start, gc); ui.toast('Camera reset'); });
   // compile every shader now (loading screen) so no first visit stalls the frame loop
   const tWarm = performance.now();
-  const nWarm = await engine.warmup([engine.scene, engine.nebulaScene], [engine.blackHolePass.material], p => progress(0.9 + 0.1 * p, t('shaders')));
+  const nWarm = await engine.warmup([engine.scene, engine.nebulaScene, engine.volScene], [engine.blackHolePass.material], p => progress(0.9 + 0.1 * p, t('shaders')));
   if (params.has('debug')) console.log(`[warmup] ${nWarm} materials in ${((performance.now() - tWarm) / 1000).toFixed(1)}s`);
   progress(1, t('ready'));
   engine.start();

@@ -4,6 +4,8 @@ export const UI = {
     brandName: 'MILKY WAY', brandSub: 'Interactive Universe',
     searchPlaceholder: 'Search — Earth, Saturn, Sagittarius A*, Orion Nebula, Voyager 1…',
     tour: 'Cinematic Tour', tourTitle: 'Cinematic Tour (T)', help: 'Controls (?)', settings: 'Settings', hideUI: 'Hide UI (H)',
+    snStarted: 'Supernova simulation: core collapse, flash, shock wave and remnant — about 40 s. Esc stops it.', tFlightReal2: 'Ship: W A S D Q E thrust · Shift boost · wheel = throttle · Space / X brake · time speed ≫ 1 shows real gravity',
+    sbBtn: 'Star birth', sbBtnT: 'Birth of a star — interactive simulation', sbTitle: 'Birth of a star', sbStart: 'Start the simulation', sbExit: 'Exit simulation (Esc)', sbTour: 'Guided sequence', sbTourStop: 'Stop sequence', sbFree: 'Explore freely', sbMode: 'View', sbModeNormal: 'Normal', sbModeSci: 'Scientific', sbModeExplain: 'Explained', sbLayer: 'Layer', sbLayerNone: 'Structure', sbLayerDensity: 'Density', sbLayerTemp: 'Temperature', sbLayerFlow: 'Flow & rotation', sbMass: 'Star mass', sbPrev: 'Previous stage', sbNext: 'Next stage', sbRestart: 'Restart', sbPhaseOf: 'Stage {n} of 7', sbAge: 'Age', sbRate: '1 s ≈ {y}', sbSurfaceT: 'Surface temp.', sbCoreT: 'Core temp.', sbCoreDens: 'Core density', sbRadius: 'Radius', sbLum: 'Luminosity', sbMassAcc: 'Mass accreted', sbScale: 'Scale', sbCloud: 'Cloud core', sbDisc: 'Disc', sbStar: 'Star', sbScaleNote: 'If the cloud core were a 100 m stadium, the disc would be {d} m across and the star {s} mm.', sbDurations: 'Real duration of each stage', sbFact: 'Did you know?', sbNote: 'Conceptual simulation inspired by real astrophysics: sizes, brightness and time are compressed so the whole process fits in minutes. Structures are labelled — click them for details.', sbTourDone: 'A star is born — explore freely, or restart the sequence', sbHint: 'Drag to orbit · wheel to zoom across scales · Space pauses · Esc exits', sbIgnited: 'Hydrogen fusion has begun', sbTourName: 'Birth of a Star', sbTourDesc: 'Interactive simulation: from a cold molecular cloud to a shining star. Guided camera, explanations and a scientific view.', sbTourMeta: '7 stages · ~5 min',
     focus: 'Focus', travelTo: 'Travel to', follow: 'Follow', close: 'Close (Esc)', collapse: 'Collapse panel', expand: 'Expand panel', showPanel: 'Show info panel',
     region: 'Region', position: 'Position', target: 'Target', speed: 'Speed', camera: 'Camera',
     fromSun: 'from Sun', pause: 'Pause (Space)', now: 'now', nowTitle: 'Reset to current date (N)',
@@ -60,7 +62,7 @@ export const UI = {
       semiMajorAxis: 'Semi-major axis', orbitalPeriod: 'Orbital period', rotationPeriod: 'Rotation period', dayLength: 'Solar day',
       moons: 'Moons', gravity: 'Surface gravity', escapeVelocity: 'Escape velocity', density: 'Density', axialTilt: 'Axial tilt',
       eccentricity: 'Eccentricity', inclination: 'Inclination', albedo: 'Albedo', atmosphere: 'Atmosphere', discovered: 'Discovered',
-      age: 'Age', diameter: 'Diameter', stars: 'Stars', spectralType: 'Spectral type', luminosity: 'Luminosity', apparentMag: 'Apparent mag.',
+      age: 'Age', diameter: 'Diameter', stars: 'Stars', spectralType: 'Spectral type', luminosity: 'Luminosity', apparentMag: 'Apparent mag.', phase: 'Stage', starMass: 'Star mass', coreSize: 'Cloud core', discRadius: 'Disc radius', surfaceTemp: 'Surface temperature', coreTemp: 'Core temperature', coreDensity: 'Core density', massAccreted: 'Mass accreted',
       absoluteMag: 'Absolute mag.', constellation: 'Constellation', rotation: 'Rotation', size: 'Size', launched: 'Launched', status: 'Status',
       speed: 'Speed', pitchAngle: 'Pitch angle', width: 'Width', schwarzschild: 'Schwarzschild radius', class: 'Class', composition: 'Composition',
       surfacePressure: 'Surface pressure', magnitude: 'Magnitude', parent: 'Orbits', period: 'Period', perihelion: 'Perihelion', aphelion: 'Aphelion',
@@ -70,7 +72,7 @@ export const UI = {
     kinds: {
       site: 'Surface site',
       sun: 'Sun', star: 'Star', planet: 'Planet', dwarf: 'Dwarf planet', moon: 'Moon', asteroid: 'Asteroid', comet: 'Comet', spacecraft: 'Spacecraft',
-      nebula: 'Nebula', blackhole: 'Black hole', galaxy: 'Galaxy', region: 'Region', constellation: 'Constellation', cluster: 'Cluster',
+      nebula: 'Nebula', blackhole: 'Black hole', galaxy: 'Galaxy', region: 'Region', constellation: 'Constellation', cluster: 'Cluster', starbirth: 'Simulation', structure: 'Structure',
     },
     kindLabels: {
       'White dwarf': 'White dwarf', 'Supergiant star': 'Supergiant star', 'Red dwarf': 'Red dwarf', 'Wolf–Rayet star': 'Wolf–Rayet star', 'Luminous blue variable': 'Luminous blue variable', 'Star': 'Star', 'Pulsar': 'Pulsar',
@@ -90,6 +92,8 @@ export const UI = {
     brandName: 'VÍA LÁCTEA', brandSub: 'Universo interactivo',
     searchPlaceholder: 'Buscar — Tierra, Saturno, Sagitario A*, Nebulosa de Orión, Voyager 1…',
     tour: 'Tour cinematográfico', tourTitle: 'Tour cinematográfico (T)', help: 'Controles (?)', settings: 'Ajustes', hideUI: 'Ocultar interfaz (H)',
+    snStarted: 'Simulación de supernova: colapso del núcleo, destello, onda de choque y remanente, unos 40 s. Esc la detiene.', tFlightReal2: 'Nave: W A S D Q E empujan · Shift turbo · rueda = potencia · Espacio / X frenan · con el tiempo acelerado se nota la gravedad real',
+    sbBtn: 'Nace una estrella', sbBtnT: 'Nacimiento de una estrella — simulación interactiva', sbTitle: 'Nacimiento de una estrella', sbStart: 'Iniciar la simulación', sbExit: 'Salir de la simulación (Esc)', sbTour: 'Secuencia guiada', sbTourStop: 'Detener secuencia', sbFree: 'Explorar libremente', sbMode: 'Vista', sbModeNormal: 'Normal', sbModeSci: 'Científica', sbModeExplain: 'Explicativa', sbLayer: 'Capa', sbLayerNone: 'Estructura', sbLayerDensity: 'Densidad', sbLayerTemp: 'Temperatura', sbLayerFlow: 'Flujo y rotación', sbMass: 'Masa estelar', sbPrev: 'Etapa anterior', sbNext: 'Etapa siguiente', sbRestart: 'Reiniciar', sbPhaseOf: 'Etapa {n} de 7', sbAge: 'Edad', sbRate: '1 s ≈ {y}', sbSurfaceT: 'Temp. superficial', sbCoreT: 'Temp. del núcleo', sbCoreDens: 'Densidad del núcleo', sbRadius: 'Radio', sbLum: 'Luminosidad', sbMassAcc: 'Masa acretada', sbScale: 'Escala', sbCloud: 'Núcleo', sbDisc: 'Disco', sbStar: 'Estrella', sbScaleNote: 'Si el núcleo de la nube fuera un estadio de 100 m, el disco mediría {d} m y la estrella {s} mm.', sbDurations: 'Duración real de cada etapa', sbFact: '¿Sabías que…?', sbNote: 'Simulación conceptual inspirada en la astrofísica real: tamaños, brillos y tiempos están comprimidos para que todo el proceso quepa en minutos. Las estructuras llevan etiqueta: pulsa sobre ellas para ver detalles.', sbTourDone: 'Ha nacido una estrella: explora libremente o reinicia la secuencia', sbHint: 'Arrastra para orbitar · rueda para cambiar de escala · Espacio pausa · Esc sale', sbIgnited: 'Ha comenzado la fusión del hidrógeno', sbTourName: 'Nacimiento de una estrella', sbTourDesc: 'Simulación interactiva: de una nube molecular fría a una estrella brillante. Cámara guiada, explicaciones y vista científica.', sbTourMeta: '7 etapas · ~5 min',
     focus: 'Enfocar', travelTo: 'Viajar', follow: 'Seguir', close: 'Cerrar (Esc)', collapse: 'Plegar panel', expand: 'Desplegar panel', showPanel: 'Mostrar panel de datos',
     region: 'Región', position: 'Posición', target: 'Objetivo', speed: 'Velocidad', camera: 'Cámara',
     fromSun: 'del Sol', pause: 'Pausa (Espacio)', now: 'ahora', nowTitle: 'Volver a la fecha actual (N)',
@@ -141,7 +145,7 @@ export const UI = {
       semiMajorAxis: 'Semieje mayor', orbitalPeriod: 'Periodo orbital', rotationPeriod: 'Periodo de rotación', dayLength: 'Día solar',
       moons: 'Lunas', gravity: 'Gravedad superficial', escapeVelocity: 'Velocidad de escape', density: 'Densidad', axialTilt: 'Inclinación del eje',
       eccentricity: 'Excentricidad', inclination: 'Inclinación', albedo: 'Albedo', atmosphere: 'Atmósfera', discovered: 'Descubrimiento',
-      age: 'Edad', diameter: 'Diámetro', stars: 'Estrellas', spectralType: 'Tipo espectral', luminosity: 'Luminosidad', apparentMag: 'Mag. aparente',
+      age: 'Edad', diameter: 'Diámetro', stars: 'Estrellas', spectralType: 'Tipo espectral', luminosity: 'Luminosidad', apparentMag: 'Mag. aparente', phase: 'Etapa', starMass: 'Masa de la estrella', coreSize: 'Núcleo de la nube', discRadius: 'Radio del disco', surfaceTemp: 'Temperatura superficial', coreTemp: 'Temperatura del núcleo', coreDensity: 'Densidad del núcleo', massAccreted: 'Masa acretada',
       absoluteMag: 'Mag. absoluta', constellation: 'Constelación', rotation: 'Rotación', size: 'Tamaño', launched: 'Lanzamiento', status: 'Estado',
       speed: 'Velocidad', pitchAngle: 'Ángulo de paso', width: 'Anchura', schwarzschild: 'Radio de Schwarzschild', class: 'Clase', composition: 'Composición',
       surfacePressure: 'Presión superficial', magnitude: 'Magnitud', parent: 'Orbita a', period: 'Periodo', perihelion: 'Perihelio', aphelion: 'Afelio',
@@ -150,7 +154,7 @@ export const UI = {
     kinds: {
       site: 'Lugar en superficie',
       sun: 'Sol', star: 'Estrella', planet: 'Planeta', dwarf: 'Planeta enano', moon: 'Luna', asteroid: 'Asteroide', comet: 'Cometa', spacecraft: 'Nave espacial',
-      nebula: 'Nebulosa', blackhole: 'Agujero negro', galaxy: 'Galaxia', region: 'Región', constellation: 'Constelación', cluster: 'Cúmulo',
+      nebula: 'Nebulosa', blackhole: 'Agujero negro', galaxy: 'Galaxia', region: 'Región', constellation: 'Constelación', cluster: 'Cúmulo', starbirth: 'Simulación', structure: 'Estructura',
     },
     kindLabels: {
       'Asteroid': 'Asteroide', 'Near-Earth asteroid': 'Asteroide cercano a la Tierra', 'Rover': 'Rover', 'Historic site': 'Lugar histórico', 'Surface feature': 'Accidente superficial', 'Inner moon': 'Luna interior', 'Irregular moon': 'Luna irregular', 'Red dwarf': 'Enana roja', 'White dwarf': 'Enana blanca', 'Supergiant star': 'Estrella supergigante', 'Pulsar': 'Púlsar', 'Magnetar': 'Magnetar',

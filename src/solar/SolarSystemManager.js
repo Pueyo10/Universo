@@ -247,8 +247,9 @@ export class SolarSystemManager {
       if (M <= b.def.massKg) continue;
       const shift = sum.multiplyScalar(-1 / M);
       b.barycenter = (b.barycenter || new THREE.Vector3()).copy(b.position);   // the Keplerian point IS the barycentre
-      b.position.add(shift); b.trackVelocity(simMs); b.syncGroup();
-      for (const m of b.children) { if (m.kind !== 'moon' || !m.def) continue; m.position.add(shift); m.trackVelocity(simMs); m.syncGroup(); }
+      // velocity must be measured on the shifted positions only (a pre-shift sample would read the shift itself as ~300 units/s)
+      b.deferVelocity = true; b.position.add(shift); b.trackVelocity(simMs); b.syncGroup();
+      for (const m of b.children) { if (m.kind !== 'moon' || !m.def) continue; m.deferVelocity = true; m.position.add(shift); m.trackVelocity(simMs); m.syncGroup(); }
     }
   }
 

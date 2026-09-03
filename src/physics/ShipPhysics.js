@@ -19,6 +19,9 @@ export class ShipPhysics {
     this.thrust = new THREE.Vector3();            // requested acceleration direction (ship frame), |t| ≤ 1
     this.thrustAccel = 9.81;                      // m/s² at full throttle (1 g)
     this.boost = 1;
+    this.assist = 0;                              // flight assist: extra thrust (units/s² of real time) scaled to the distance to the nearest major body, so the ship answers the stick at 1× time
+    this.assistVmax = Infinity;                   // flight assist: soft cap on the speed relative to the reference body (units per simulated second)
+    this.assistBody = null;                       // nearest major body (planet / moon / star): speed cap + collision reference
     this.enginesOn = true;
     this.gravity = new THREE.Vector3();           // last gravitational acceleration (units/s²)
     this.dominant = null;                         // body with the largest acceleration on us
@@ -94,7 +97,8 @@ export class ShipPhysics {
     if (n > this.maxSubsteps) { dtSim *= this.maxSubsteps / n; n = this.maxSubsteps; this.speedLimited = true; }
     const h = dtSim / n;
     // thrust in world frame (m/s² -> units/s²: 1 unit = 1e6 m)
-    const thrustW = this._vrel.copy(this.thrust).applyQuaternion(shipQuat).multiplyScalar(this.enginesOn ? this.thrustAccel * this.boost / 1e6 : 0);
+    const accReal = this.thrustAccel * this.boost / 1e6, accAssist = this.assist * this.boost / Math.max(speed, 1);
+    const thrustW = this._vrel.copy(this.thrust).applyQuaternion(shipQuat).multiplyScalar(this.enginesOn ? Math.max(accReal, accAssist) : 0);
     const a = this._rel;
     for (let i = 0; i < n; i++) {
       // velocity Verlet (kick-drift-kick)
@@ -104,17 +108,27 @@ export class ShipPhysics {
       this.accel(pos, a).add(thrustW);
       this.velocity.addScaledVector(a, h * 0.5);
     }
-    // surface collision with the dominant body (soft landing: stop relative motion)
+    // flight assist: the speed relative to the reference body is eased toward the cap (the ship slows down as a world grows in the window)
+    const ref = this.assistBody || this.dominant;
+    if (ref && this.assist > 0 && isFinite(this.assistVmax)) {
+      const bv = this.bodyVelocity(ref, this._vrel);
+      const rel = this._tmp2.copy(this.velocity).sub(bv);
+      const vr = rel.length();
+      if (vr > this.assistVmax) { rel.multiplyScalar(1 + (this.assistVmax / vr - 1) * (1 - Math.exp(-5 * dtReal))); this.velocity.copy(bv).add(rel); }
+    }
+    // surface collision with the reference / dominant body (soft landing: stop relative motion)
     this.landed = false;
-    if (this.dominant && this.dominant.radius) {
-      const p = this.dominant.getPosition(this._tmp);
+    for (const body of [ref, this.dominant]) {
+      if (!body || !body.radius) continue;
+      const p = body.getPosition(this._tmp);
       const d = this._tmp2.copy(pos).sub(p);
-      const minR = this.dominant.radius * (this.dominant.kind === 'sun' || this.dominant.kind === 'star' ? 1.02 : 1.0002);
+      const minR = body.radius * (body.kind === 'sun' || body.kind === 'star' ? 1.02 : 1.0002);
       if (d.length() < minR) {
         pos.copy(p).addScaledVector(d.normalize(), minR);
-        const bv = this.bodyVelocity(this.dominant, this._vrel);
+        const bv = this.bodyVelocity(body, this._vrel);
         this.velocity.copy(bv);
         this.landed = true;
+        break;
       }
     }
     return dtSim;

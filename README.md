@@ -81,6 +81,17 @@ render scale, chunk generation).
   **immersive mode** (`H`) with adaptive ambient audio (nebula, black hole,
   Earth, intergalactic silence) and pulsar sonification.
 
+
+## Birth of a Star — interactive simulation
+
+`✦ Star birth` in the top bar (also in the tour menu, or search "star formation"). A molecular-cloud core 30 light-years from the Orion Nebula collapses into a star in seven continuous stages: molecular cloud → gravitational collapse → protostar → protoplanetary disc → bipolar jets (Herbig–Haro knots) → hydrogen ignition → main sequence.
+
+- **Continuous physics**: every visual quantity (radius, temperature, luminosity, core state, disc, jets, envelope) is a smooth function of one simulation clock, so the sequence can be paused, accelerated (1×–1000×), scrubbed and rewound; processes overlap as in nature and the pace never jumps between stages. Real ages and "1 s ≈ N years" are shown at all times.
+- **Three views**: normal (cinematic), scientific (infall arrows, gravity-vs-pressure arrows, density / temperature / flow colour layers, live readouts) and explained (timed captions).
+- **Three masses**: 0.2 M☉ red dwarf, Sun-like, 15 M☉ blue giant (ionises its cloud; its young star qualifies for the supernova simulation).
+- **Guided sequence**: ~5 min spline camera through every scale with captions; `Esc` hands control back. Structures (core, protostar, disc, both jets, sibling protostars) are labelled and selectable.
+- **Rendering**: the cloud is a ray-marched volume in a reduced-resolution layer composited *after* the star layers, so the dark cloud hides the stars behind it (its extinction also dims the embedded protostar; the infrared observatory band sees through it). GPU-driven dust / disc / jet particles, Keplerian disc shader, jet beams with moving knots, StarBody photosphere for the star.
+
 ## Controls
 
 | Action | Input |
@@ -95,6 +106,8 @@ render scale, chunk generation).
 | Toggles | `O` orbits · `L` labels · `C` constellations · `G` grid · `V` real / visual scale · `M` audio |
 | Camera modes | `1` free · `2` orbit · `3` follow · `4` realistic flight · `R` reset · `T` tours |
 | UI | `H` immersive · `F2` photo mode · `F3` stats · `B` database · `K` star map · `P` physics · `Esc` cancel / hide info panel (a side tab brings it back; `▾` folds it to the header) |
+| Ship (Flight toggle / `4`) | `W A S D Q E` thrust · `Shift` boost · wheel = throttle · `Space` / `X` brake (match the reference body) · `C` circular orbit · flight assist scales thrust and caps speed with the distance to the nearest world; accelerate time to see real gravity |
+| Star birth | `Space` pause · `[` `]` speed · `Esc` leaves the guided sequence, then the simulation |
 
 ## What is in the box
 

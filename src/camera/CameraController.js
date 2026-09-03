@@ -5,6 +5,7 @@ import { ShipPhysics } from '../physics/ShipPhysics.js';
 
 export const CAM_MODE = { FREE: 'FREE', SHIP: 'SHIP', ORBIT: 'ORBIT', FOLLOW: 'FOLLOW', TRAVEL: 'TRAVEL', CINEMATIC: 'CINEMATIC' };
 
+const MAJOR_KINDS = new Set(['sun', 'star', 'planet', 'dwarf', 'moon', 'blackhole']);
 const easeInOut = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 
@@ -374,6 +375,13 @@ export class CameraController {
     if (k.has('KeyQ')) th.y -= 1;
     if (th.lengthSq() > 0) th.normalize();
     sh.boost = (k.has('ShiftLeft') || k.has('ShiftRight')) ? 10 : (k.has('ControlLeft') || k.has('ControlRight')) ? 0.1 : 1;
+    // flight assist: reference = nearest major body (planets, moons, stars — not probes or asteroids); thrust and the speed cap scale with
+    // the distance to its surface, so the ship answers the stick at 1× time and eases off as a world fills the window
+    const nm = this.registry.nearest(this.position, o => MAJOR_KINDS.has(o.kind), this._nearMajor || (this._nearMajor = { obj: null, dist: Infinity, centerDist: Infinity }));
+    const dRef = Math.max(nm.dist, 0.02);
+    sh.assistBody = nm.obj; sh.assist = dRef * 0.8; sh.assistVmax = dRef * 2.0;
+    // brake: Space kills the velocity relative to the dominant body (same as X)
+    if (k.has('Space') && sh.dominant) sh.matchVelocity(sh.dominant);
     // wheel: throttle (thrust acceleration) in log steps, 0.1 m/s² … 1000 m/s²
     if (this.wheelAccum !== 0) { sh.thrustAccel = clamp(sh.thrustAccel * Math.exp(-this.wheelAccum * 0.25), 0.1, 1000); bus.emit('ship:throttle', sh.thrustAccel); }
     // X: kill relative velocity (match the dominant body) · C: circular orbit around it
@@ -398,7 +406,7 @@ export class CameraController {
     if (!t) { this.setMode(CAM_MODE.FREE); return; }
     // wheel zoom in log space
     if (this.wheelAccum !== 0) o.distTarget *= Math.exp(this.wheelAccum * 0.11);
-    const minD = t.radius * (t.kind === 'sun' || t.kind === 'star' ? 1.05 : 1.0008);
+    const minD = (t.orbitMin ?? t.radius) * (t.kind === 'sun' || t.kind === 'star' ? 1.05 : 1.0008);
     o.distTarget = clamp(o.distTarget, minD, Math.max(t.radius * 1e6, 1e12));
     o.dist = Math.exp(damp(Math.log(o.dist), Math.log(o.distTarget), 7, dt));
     // keyboard: WASD orbits, QE zoom

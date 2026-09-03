@@ -112,7 +112,7 @@ export class Body {
     }
     // ---- orientation
     this._updateOrientation(days);
-    this.trackVelocity(simMs);
+    if (!this.deferVelocity) this.trackVelocity(simMs);   // barycentre-shifted bodies track velocity after the shift (SolarSystemManager)
     this.syncGroup();
   }
 
