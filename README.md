@@ -117,6 +117,12 @@ render scale, chunk generation).
 - **Cinematic camera**: per-pixel camera motion blur (reprojection vector, strong during travel,
   tours and flight, subtle otherwise) and a depth of field with temporally integrated bokeh
   (photo-mode aperture slider; a mild one during tours). Both toggles live in Settings.
+- **Temporal upscaling**: when the dynamic resolution drops, the scene is rendered into a
+  fraction of the frame and the TAA history reconstructs the full-resolution image (TAAU), so
+  a 50 % render scale keeps smooth edges instead of the old bilinear stretch.
+- **Cinematic camera**: per-pixel camera motion blur (reprojection vector, strong during travel,
+  tours and flight, subtle otherwise) and a depth of field with temporally integrated bokeh
+  (photo-mode aperture slider; a mild one during tours). Both toggles live in Settings.
 
 ## Controls
 
