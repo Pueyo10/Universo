@@ -26,6 +26,11 @@ const FinalShader = {
     uBand: { value: 0 },
     uHaze: { value: 0.0 },
     uHazeColor: { value: new THREE.Color(0.6, 0.75, 1.0) },
+    tLum: { value: null },
+    uAutoExp: { value: 1.0 },
+    uKey: { value: 0.16 },
+    uExpMin: { value: 0.35 },
+    uExpMax: { value: 3.5 },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -33,8 +38,8 @@ const FinalShader = {
   `,
   fragmentShader: /* glsl */`
     precision highp float;
-    uniform sampler2D tDiffuse;
-    uniform float uExposure, uTime, uAspect, uVignette, uAberration, uGrain, uWarp, uLens, uSunVisible, uSunSize, uFade, uSaturation, uBand, uHaze;
+    uniform sampler2D tDiffuse, tLum;
+    uniform float uExposure, uTime, uAspect, uVignette, uAberration, uGrain, uWarp, uLens, uSunVisible, uSunSize, uFade, uSaturation, uBand, uHaze, uAutoExp, uKey, uExpMin, uExpMax;
     uniform vec3 uHazeColor;
     uniform vec2 uResolution, uWarpCenter, uSunScreen;
     uniform vec3 uSunColor;
@@ -119,11 +124,14 @@ const FinalShader = {
         col.b = sampleScene(uv - off).b;
       }
 
-      col *= uExposure;
+      // photographic auto exposure: key / adapted mean luminance, bounded so deep space stays dark and the Sun stays bright
+      float expo = uExposure;
+      if (uAutoExp > 0.5) { float avg = exp(texture2D(tLum, vec2(0.5)).r); expo *= clamp(uKey / max(avg, 1e-5), uExpMin, uExpMax); }
+      col *= expo;
       // atmospheric entry haze: scattered light fills the frame as the camera descends
-      if (uHaze > 0.001) col = mix(col, uHazeColor * (0.6 + 0.4 * uExposure), uHaze);
+      if (uHaze > 0.001) col = mix(col, uHazeColor * (0.6 + 0.4 * expo), uHaze);
 
-      if (uLens > 0.5 && uSunVisible > 0.001) col += flare(uv) * uSunVisible * uExposure;
+      if (uLens > 0.5 && uSunVisible > 0.001) col += flare(uv) * uSunVisible * expo;
       // observatory false colour: keep structure, tint by band, boost contrast so faint emission reads
       if (uBand > 0.5) {
         float l = dot(col, vec3(0.2126, 0.7152, 0.0722));

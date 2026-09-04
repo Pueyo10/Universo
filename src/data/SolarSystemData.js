@@ -90,7 +90,7 @@ export const PLANETS = [
   {
     id: 'mars', name: 'Mars', kind: 'planet', color: '#e0805a', radiusKm: 3389.5, massKg: 6.4171e23, elements: 'mars', rotation: 'mars',
     texture: T('2k_mars.jpg'), type: 'rocky', fakeNormal: 2.2,
-    atmosphere: { color: [0.9, 0.6, 0.4], height: 0.012, density: 0.12, mie: 0.9, rayleigh: [0.7, 0.45, 0.3], dust: true },
+    atmosphere: { color: [0.9, 0.6, 0.4], height: 0.025, density: 0.12, mie: 0.9, rayleigh: [0.7, 0.45, 0.3], dust: true },
     subtitle: 'Fourth planet · the Red Planet',
     data: { type: 'Terrestrial planet', radius: '3,389.5 km (0.53 × Earth)', mass: '6.42 × 10²³ kg', semiMajorAxis: '1.524 AU (227.9 million km)', orbitalPeriod: '687 days', rotationPeriod: '24 h 37 m', gravity: '3.72 m/s²', meanTemp: '−63 °C', surfacePressure: '0.006 bar', axialTilt: '25.19°', moons: '2 (Phobos, Deimos)', atmosphere: '95% CO₂ · 2.8% N₂ · 2% Ar' },
     description: 'A cold desert world painted red by iron oxide, Mars holds the largest volcano in the Solar System (Olympus Mons, 21 km high) and a canyon system, Valles Marineris, that would stretch across the United States. Ancient river valleys and lake beds record a warmer, wetter past. Its polar caps of water and carbon-dioxide ice grow and shrink with the seasons.',
@@ -140,7 +140,7 @@ export const PLANETS = [
 export const DWARF_PLANETS = [
   {
     id: 'pluto', name: 'Pluto', kind: 'dwarf', kindLabel: 'Dwarf planet', color: '#d8c4b0', radiusKm: 1188.3, massKg: 1.303e22, elements: 'pluto', rotation: 'pluto', barycenter: true,
-    procedural: 'pluto', type: 'rocky', atmosphere: { color: [0.6, 0.7, 0.9], height: 0.06, density: 0.05, mie: 0.4, rayleigh: [0.4, 0.6, 1.0] },
+    procedural: 'pluto', type: 'rocky', atmosphere: { color: [0.6, 0.7, 0.9], height: 0.2, density: 0.05, mie: 0.4, rayleigh: [0.4, 0.6, 1.0] },
     subtitle: 'Dwarf planet · king of the Kuiper Belt',
     data: { type: 'Dwarf planet (plutoid)', radius: '1,188 km (0.19 × Earth)', mass: '1.30 × 10²² kg', semiMajorAxis: '39.48 AU', orbitalPeriod: '248 years', rotationPeriod: '6.39 days (retrograde)', gravity: '0.62 m/s²', meanTemp: '−229 °C', axialTilt: '122.5°', moons: '5 (Charon, Styx, Nix, Kerberos, Hydra)', discovered: '1930 by Clyde Tombaugh' },
     description: 'A world of nitrogen glaciers and water-ice mountains, Pluto surprised New Horizons in 2015 with a young, active surface: the vast heart-shaped Sputnik Planitia, a slowly convecting sea of frozen nitrogen, and hazy blue skies. It and its large moon Charon orbit a point between them, forming a true double system.',

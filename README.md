@@ -94,6 +94,24 @@ render scale, chunk generation).
 - **Real particle dynamics** (`src/starbirth/StarBirthGPU.js`): 65k particles integrated on the GPU (ping-pong float textures). Each feels the gravity of the growing protostar plus the enclosed cloud mass, turbulence, and gas drag toward the Keplerian flow near the midplane — so spinning infall hits its centrifugal barrier and settles into a disc by itself; accreted particles re-enter from the envelope. Scrubbing re-simulates the state (debounced fast-forward). The scientific *flow* layer colours them by inward vs. tangential velocity.
 - **The whole life** (stages 8–10, per mass): Sun-like → red giant → planetary nebula (shell shader) → white dwarf; 15 M☉ → red supergiant → core collapse handed to the supernova simulation → neutron star; 0.2 M☉ → trillion-year endurance → predicted blue dwarf → helium white dwarf; 0.05 M☉ brown dwarf that never ignites and cools for ever. All tracks are smooth curves of the same clock; ages, texts, captions and the guided sequence follow the chosen mass.
 
+## Graphics
+
+- **Temporal anti-aliasing** (Halton-jittered projection, depth reprojection in the
+  camera-relative frame, YCoCg neighbourhood clamp) and **eye adaptation** (histogram-free
+  log-luminance average, ACES) on the medium preset and above.
+- **Physically based atmospheres**: single scattering with per-planet scale heights and
+  vertical optical depths (Earth: Rayleigh 0.30 at 440 nm, aerosols 0.18, ozone Chappuis
+  band), Chapman-function sun transmittance, samples concentrated at the lowest point of
+  each ray. The same shell gives the blue limb from space, aerial perspective over the disc,
+  sunsets from orbit and the sky seen from inside the atmosphere.
+- **Google-Maps-style close-ups**: 8K maps (high/ultra presets) and, closer still, real
+  NASA tiles streamed on demand — Blue Marble Next Generation (500 m) and VIIRS city lights
+  for Earth, LRO WAC for the Moon, Viking MDIM 2.1 for Mars, MESSENGER MDIS for Mercury.
+  A quadtree picks the level that beats the base texture, parents are hidden once their
+  visible children are ready, and a per-level depth bias keeps finer tiles on top.
+- Cloud decks fade out below ~0.25 radii so the surface can be explored; the ocean glint
+  is damped from low orbit.
+
 ## Controls
 
 | Action | Input |
@@ -179,11 +197,13 @@ render scale, chunk generation).
 src/
   core/        Engine (renderer, HDR composer, quality presets, dynamic resolution,
                volumetric layer, shader precompile), Units & frames, seeded RNG, noise, events
-  postfx/      FinalPass (tone map, flare, warp), BlackHolePass (geodesic lensing)
+  postfx/      FinalPass (tone map, auto exposure, flare, warp), TAAPass (temporal AA),
+               ExposurePass (eye adaptation), BlackHolePass (geodesic lensing)
   workers/     chunkWorker (procedural star cells), textureWorker (planet surfaces)
   universe/    UniverseManager, GalaxyModel/Manager, StarFieldManager (LOD chunks),
                NebulaManager, BlackHole, DistantGalaxies, Constellations, Grids, BackgroundSky
   solar/       SolarSystemManager, Body (orbits & IAU rotation), Sun, Planet, Rings,
+               TileGlobe (streamed NASA surface tiles for close-ups),
                Belts, Comets, Spacecraft, OrbitLines/Markers, ExoSystem,
                SurfaceGen (pure recipes) + TextureFactory (textures, worker pool)
   camera/      CameraController (free/orbit/follow/travel), CinematicTour
@@ -196,7 +216,8 @@ src/
 ## Credits
 
 Planet maps © [Solar System Scope](https://www.solarsystemscope.com/textures/)
-(CC BY 4.0). Everything else — galaxy, stars, nebulae, moons, Pluto, rings,
+(CC BY 4.0). Close-up surface tiles: NASA GIBS (Blue Marble Next Generation, VIIRS)
+and NASA Trek (LRO WAC, Viking MDIM 2.1, MESSENGER MDIS). Everything else — galaxy, stars, nebulae, moons, Pluto, rings,
 exoplanets, the black hole — is generated procedurally at runtime from seeds.
 Orbital elements after Standish (JPL), rotation elements after the IAU WGCCRE
 reports, star data from the Hipparcos / Yale catalogues.

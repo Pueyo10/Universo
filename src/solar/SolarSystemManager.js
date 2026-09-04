@@ -175,7 +175,7 @@ export class SolarSystemManager {
     if (near.obj && near.obj.kind === 'sun' && near.dist < near.obj.radius * 12) target = 0.36;
     this.exposure = damp(this.exposure, target, 2, dt);
     const settings = this.engine.settings;
-    const sceneExposure = settings.exposure * (settings.autoExposure ? this.exposure : 1);
+    const sceneExposure = settings.exposure * (settings.autoExposure ? lerp(1, this.exposure, 0.5) : 1);
     this.engine.finalPass.uniforms.uExposure.value = sceneExposure;
     // star field exposure: dim point stars when close to bright bodies, brighter far away
     const starExp = settings.autoExposure ? clamp(0.35 + 0.65 * smoothstep(50 * AU, 5000 * AU, dSun), 0.35, 1.0) * (1 + 0.6 * smoothstep(3000 * LY, 60000 * LY, dSun)) : 1;
@@ -196,7 +196,7 @@ export class SolarSystemManager {
         shadowMoons.length = 0;
         if (b.kind === 'planet' && b.children) { for (const m of b.children) if (m.kind === 'moon') shadowMoons.push(m); shadowMoons.sort((a, c) => c.radius - a.radius); }
         else if (b.kind === 'moon' && b.parent) shadowMoons.push(b.parent);   // the planet's shadow on its moon: lunar eclipses
-        b.renderer.update(t, camPos, sunPos, rpx, shadowMoons, 1.0);
+        b.renderer.update(t, camPos, sunPos, rpx, shadowMoons, 1.0, cam);
         if (b.rings) b.rings.update(t, camPos, sunPos, rpx, 1.0, cam);
         b.group.visible = rpx > 0.4;
       } else if (b.kind === 'comet') {
@@ -268,7 +268,9 @@ export class SolarSystemManager {
         const sunDir = this._v.copy(b.position).negate().normalize();
         const up = this._v2.copy(camPos).sub(b.position).normalize();
         const day = clamp(0.15 + 0.85 * smoothstep(-0.2, 0.3, up.dot(sunDir)), 0, 1);
-        haze = Math.pow(depth, 1.6) * (0.25 + 0.75 * dens) * day * (atmo.thick ? 0.95 : 0.7);
+        const fwd = this.cameraCtl.getForward(this._v3 || (this._v3 = new THREE.Vector3()));
+        const down = clamp(-fwd.dot(up), 0, 1);               // looking down through a thin column: little haze
+        haze = Math.pow(depth, 1.6) * (0.25 + 0.75 * dens) * day * (atmo.thick ? 0.95 : 0.4) * (1 - 0.8 * down);
         const c = atmo.color; fp.uHazeColor.value.setRGB(c[0], c[1], c[2]);
         // realistic flight: buffet at high speed inside the atmosphere
         if (this.cameraCtl.mode === 'SHIP' && this.cameraCtl.ship) {

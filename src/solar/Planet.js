@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TileGlobe, TILE_SOURCES, HIRES, loadHiRes } from './TileGlobe.js';
 import { LOGDEPTH_PARS_VERT, LOGDEPTH_VERT, LOGDEPTH_PARS_FRAG, LOGDEPTH_FRAG, SIMPLEX3D, HASH } from '../shaders/chunks.js';
 
 // Planet rendering: layered surface / clouds / atmosphere with physically
@@ -33,6 +34,7 @@ const surfFrag = /* glsl */`
   uniform vec4 uMoons[4]; uniform int uMoonCount;
   uniform float uHexagon, uDarkSpot, uPolarBright, uExposure, uNoTerminator;
   uniform vec3 uTint;
+  uniform vec4 uTileUV, uNightTileUV;   // (u0, v0, 1/du, 1/dv): streamed tiles sample their own texture with a sub-rectangle of the global uv
   ${HASH}
   ${SIMPLEX3D}
   ${LOGDEPTH_PARS_FRAG}
@@ -62,6 +64,9 @@ const surfFrag = /* glsl */`
 
   void main() {
     ${LOGDEPTH_FRAG}
+    #ifdef TILE_BIAS
+    gl_FragDepth -= float(TILE_BIAS);   // streamed tiles win over the base sphere, finer levels over coarser ones
+    #endif
     vec3 N = normalize(vN);
     vec3 P = vPos;
     vec3 V = normalize(uCamLocal - P);
@@ -80,7 +85,7 @@ const surfFrag = /* glsl */`
     float ndl = max(dot(Nn, L), 0.0);
     // soft terminator (atmospheric twilight widens it)
     float day = uNoTerminator > 0.5 ? 1.0 : smoothstep(-0.03 - uAtmoStrength * 0.08, 0.10, ndlRaw);
-    vec3 albedo = srgb2lin(texture2D(uMap, uv).rgb) * uTint;
+    vec3 albedo = srgb2lin(texture2D(uMap, (uv - uTileUV.xy) * uTileUV.zw).rgb) * uTint;
 
     // ---- shadows
     float shadow = 1.0;
@@ -130,13 +135,14 @@ const surfFrag = /* glsl */`
       float ndh = max(dot(Nn, H), 0.0);
       float fres = pow(1.0 - max(dot(Nn, V), 0.0), 3.0);
       float glint = pow(ndh, 90.0) * 1.6 + pow(ndh, 12.0) * 0.12;
+      glint *= mix(1.0, 0.22, 1.0 - smoothstep(0.02, 0.35, length(uCamLocal) - 1.0));   // from low orbit the glint spans hundreds of km: keep it from whiting out the view
       col += vec3(1.0, 0.95, 0.85) * glint * spec * (0.25 + 0.75 * fres) * day * shadow;
       // sea colour deepening with view angle
       col += vec3(0.02, 0.05, 0.1) * spec * fres * day;
     }
     // night lights
     if (uHasNight > 0.5) {
-      vec3 night = srgb2lin(texture2D(uNightMap, uv).rgb);
+      vec3 night = srgb2lin(texture2D(uNightMap, (uv - uNightTileUV.xy) * uNightTileUV.zw).rgb);
       float nightMask = 1.0 - smoothstep(-0.12, 0.05, ndlRaw);
       col += night * vec3(1.0, 0.85, 0.6) * nightMask * 1.4;
     }
@@ -179,7 +185,7 @@ const cloudFrag = /* glsl */`
   precision highp float;
   varying vec3 vN; varying vec3 vPos; varying vec2 vUv; varying vec3 vView;
   uniform sampler2D uMap; uniform vec3 uSunDir; uniform vec3 uCamLocal;
-  uniform float uTime, uOffset, uOpaque, uExposure, uWarp;
+  uniform float uTime, uOffset, uOpaque, uExposure, uWarp, uAlpha;
   uniform vec3 uTint;
   ${HASH}
   ${SIMPLEX3D}
@@ -193,7 +199,7 @@ const cloudFrag = /* glsl */`
     // slow evolution of cloud shapes: domain warp that changes with time
     vec2 w = vec2(snoise(vec3(uv * vec2(8.0, 4.0), uTime * 0.01)), snoise(vec3(uv * vec2(8.0, 4.0) + 3.0, uTime * 0.011))) * uWarp;
     vec3 c = texture2D(uMap, uv + w).rgb;
-    float a = uOpaque > 0.5 ? 1.0 : smoothstep(0.08, 0.7, dot(c, vec3(0.333)));
+    float a = (uOpaque > 0.5 ? 1.0 : smoothstep(0.08, 0.7, dot(c, vec3(0.333)))) * uAlpha;
     float ndl = dot(N, L);
     float day = smoothstep(-0.12, 0.15, ndl);
     float lit = max(ndl, 0.0);
@@ -220,16 +226,26 @@ const atmoVert = /* glsl */`
 const atmoFrag = /* glsl */`
   precision highp float;
   varying vec3 vPos; varying vec3 vView;
-  uniform vec3 uSunDir, uCamLocal, uRayleigh, uMieColor;
-  uniform float uPlanetR, uAtmoR, uHr, uHm, uDensity, uMie, uExposure, uSunIntensity, uHaze;
-  uniform int uSteps, uLightSteps;
+  uniform vec3 uSunDir, uCamLocal, uTauR, uTauO, uMieColor;
+  uniform float uPlanetR, uAtmoR, uHr, uHm, uTauM, uExposure, uSunIntensity, uHaze;
+  uniform int uSteps;
+  uniform float uOutside;   // 1: camera outside the shell mesh (front faces), 0: inside (back faces)
   ${LOGDEPTH_PARS_FRAG}
   vec2 raySphere(vec3 ro, vec3 rd, float R) {
     float b = dot(ro, rd); float c = dot(ro, ro) - R * R; float h = b * b - c;
     if (h < 0.0) return vec2(-1.0);
     h = sqrt(h); return vec2(-b - h, -b + h);
   }
+  // Chapman grazing-incidence function (Schüler, GPU Pro 3): optical depth from altitude h (in scale heights) to space along a
+  // direction with zenith cosine c, in units of beta * H. X = planet radius in scale heights.
+  float chapman(float X, float h, float c) {
+    float k = sqrt(X + h);
+    if (c >= 0.0) return k / (k * c + 1.0) * exp(-h);
+    float x0 = sqrt(1.0 - c * c) * (X + h);
+    return 2.0 * sqrt(x0) * exp(min(X - x0, 0.0)) - k / (1.0 - k * c) * exp(-h);
+  }
   void main() {
+    if (uOutside > 0.5 ? !gl_FrontFacing : gl_FrontFacing) discard;
     ${LOGDEPTH_FRAG}
     vec3 ro = uCamLocal;
     vec3 rd = normalize(vPos - ro);
@@ -237,56 +253,59 @@ const atmoFrag = /* glsl */`
     if (ta.y < 0.0) discard;
     float t0 = max(ta.x, 0.0), t1 = ta.y;
     vec2 tp = raySphere(ro, rd, uPlanetR);
-    bool hitPlanet = tp.x > 0.0;
-    if (hitPlanet) t1 = min(t1, tp.x);
+    if (tp.x > 0.0) t1 = min(t1, tp.x);
     float len = t1 - t0;
     if (len <= 0.0) discard;
     vec3 L = normalize(uSunDir);
     float shell = uAtmoR - uPlanetR;
-    float Hr = uHr * shell, Hm = uHm * shell;
-    vec3 betaR = uRayleigh * uDensity * 22.0 / shell;
-    float betaM = uMie * uDensity * 6.0 / shell;
+    float Hr = uHr * shell, Hm = uHm * shell;          // scale heights (planet radii)
+    float XR = uPlanetR / Hr, XM = uPlanetR / Hm;
+    vec3 betaR = uTauR / Hr;                           // vertical optical depth = beta * H
+    vec3 betaE = (uTauR + uTauO) / Hr;                 // extinction: scattering + ozone absorption (same profile, simplification)
+    float betaM = uTauM / Hm;
     float mu = dot(rd, L);
     float phaseR = 3.0 / (16.0 * 3.14159) * (1.0 + mu * mu);
     float g = 0.76; float g2 = g * g;
     float phaseM = 3.0 / (8.0 * 3.14159) * ((1.0 - g2) * (1.0 + mu * mu)) / ((2.0 + g2) * pow(1.0 + g2 - 2.0 * g * mu, 1.5));
+    // samples concentrated around the lowest point of the ray (where the density peaks): cubic warp on each side of it
+    float tc = clamp(-dot(ro, rd), t0, t1);
+    float a = clamp((tc - t0) / len, 0.001, 0.999);
+    float lA = tc - t0, lB = t1 - tc;
     vec3 sumR = vec3(0.0), sumM = vec3(0.0);
     float odR = 0.0, odM = 0.0;
-    float dt = len / float(uSteps);
-    float t = t0 + dt * 0.5;
+    float N = float(uSteps);
+    float tPrev = t0;
     for (int i = 0; i < 24; i++) {
       if (i >= uSteps) break;
-      vec3 p = ro + rd * t;
-      float h = max(length(p) - uPlanetR, 0.0);
+      float s1 = (float(i) + 1.0) / N, sm = (float(i) + 0.5) / N;
+      float u1 = s1 < a ? (s1 - a) / a : (s1 - a) / (1.0 - a);
+      float um = sm < a ? (sm - a) / a : (sm - a) / (1.0 - a);
+      float tEnd = tc + u1 * u1 * u1 * (u1 < 0.0 ? lA : lB);
+      float tm = tc + um * um * um * (um < 0.0 ? lA : lB);
+      float dt = max(tEnd - tPrev, 0.0); tPrev = tEnd;
+      vec3 p = ro + rd * tm;
+      float r = length(p);
+      float h = max(r - uPlanetR, 0.0);
       float dR = exp(-h / Hr) * dt, dM = exp(-h / Hm) * dt;
+      float vR = odR + 0.5 * dR, vM = odM + 0.5 * dM;   // view optical depth up to the sample
       odR += dR; odM += dM;
-      // light optical depth
-      vec2 tl = raySphere(p, L, uAtmoR);
-      float lenL = tl.y;
-      // planet shadow (night side): if the sun ray hits the planet → no light
+      // sunlight: none where the ray to the Sun hits the planet; otherwise the Chapman optical depth to space
       vec2 tpl = raySphere(p, L, uPlanetR);
-      float lodR = 0.0, lodM = 0.0;
-      bool dark = tpl.x > 0.0;
-      if (!dark) {
-        float dl = lenL / float(uLightSteps);
-        float tl2 = dl * 0.5;
-        for (int j = 0; j < 8; j++) {
-          if (j >= uLightSteps) break;
-          vec3 q = p + L * tl2;
-          float hq = max(length(q) - uPlanetR, 0.0);
-          lodR += exp(-hq / Hr) * dl; lodM += exp(-hq / Hm) * dl;
-          tl2 += dl;
-        }
-        vec3 tau = betaR * (odR + lodR) + betaM * 1.1 * (odM + lodM);
-        vec3 att = exp(-tau);
-        sumR += dR * att; sumM += dM * att;
-      }
-      t += dt;
+      if (tpl.x > 0.0) continue;
+      float c = dot(p, L) / r;
+      float lR = Hr * chapman(XR, h / Hr, c), lM = Hm * chapman(XM, h / Hm, c);
+      vec3 att = exp(-(betaE * (vR + lR) + betaM * 1.1 * (vM + lM)));
+      sumR += dR * att; sumM += dM * att;
     }
     vec3 inscatter = uSunIntensity * (sumR * betaR * phaseR + sumM * betaM * phaseM * uMieColor);
-    // extra thick haze term for Venus/Titan style atmospheres (multiple scattering approximation)
-    vec3 trans = exp(-(betaR * odR + betaM * odM));
+    // single scattering leaves a green band where blue is gone but red is weakly scattered; real twilights are whitened by
+    // multiple scattering, so pull green-dominant in-scatter toward grey
+    float lum = dot(inscatter, vec3(0.3, 0.59, 0.11));
+    float greenish = clamp((inscatter.g - max(inscatter.r, inscatter.b)) / (lum + 1e-4) * 3.0, 0.0, 1.0);
+    inscatter = mix(inscatter, vec3(lum), greenish * 0.85);
+    vec3 trans = exp(-(betaE * odR + betaM * odM));
     float alpha = 1.0 - dot(trans, vec3(0.333));
+    // extra thick haze term for Venus/Titan style atmospheres (multiple scattering approximation)
     if (uHaze > 0.0) {
       float sunlit = smoothstep(-0.25, 0.35, dot(normalize(ro + rd * (t0 + len * 0.5)), L));
       inscatter += uMieColor * uHaze * alpha * sunlit * 0.6;
@@ -295,11 +314,35 @@ const atmoFrag = /* glsl */`
   }
 `;
 
+
 let _geoCache = {};
 function sphereGeo(seg) {
   const k = 'g' + seg;
   if (!_geoCache[k]) _geoCache[k] = new THREE.SphereGeometry(1, seg, Math.round(seg * 0.75));
   return _geoCache[k];
+}
+
+/**
+ * Physically based atmosphere parameters: scale height H (km), vertical optical depth of the Rayleigh part (at the blue
+ * reference of `rayleigh`) and of the Mie/aerosol part, Mie scale height as a fraction of H, and the in-scatter strength.
+ * Earth: tau_R ~ 0.30 at 440 nm, aerosol tau ~ 0.1 (clear day), H = 8.5 km, aerosols ~1.2 km.
+ */
+const ATMO_PHYS = {
+  earth:   { H: 8.5,  tauR: 0.30, tauM: 0.18, hm: 0.4, tauO: [0.03, 0.035, 0.004] },   // ozone (Chappuis band): 300 DU
+  venus:   { H: 15.9, tauR: 4.0,  tauM: 25.0, hm: 0.6 },
+  mars:    { H: 11.1, tauR: 0.05, tauM: 0.45, hm: 0.6 },
+  jupiter: { H: 27,   tauR: 0.5,  tauM: 0.5,  hm: 0.6 },
+  saturn:  { H: 59.5, tauR: 0.5,  tauM: 0.6,  hm: 0.6 },
+  uranus:  { H: 27.7, tauR: 1.5,  tauM: 0.3,  hm: 0.6 },
+  neptune: { H: 19.7, tauR: 1.5,  tauM: 0.3,  hm: 0.6 },
+  pluto:   { H: 50,   tauR: 0.008, tauM: 0.012, hm: 0.8 },
+  titan:   { H: 40,   tauR: 2.5,  tauM: 8.0,  hm: 0.7 },
+  triton:  { H: 14,   tauR: 0.01, tauM: 0.02, hm: 0.8 },
+};
+function atmoPhysics(def, atmo) {
+  const Rkm = def.radiusKm || def.r || 6371;
+  const ph = ATMO_PHYS[def.id] || { H: 0.25 * Rkm * atmo.height, tauR: 0.3 * (atmo.density || 1), tauM: 0.1 * (atmo.mie || 0.5) * (atmo.density || 1), hm: 0.5 };
+  return { hr: THREE.MathUtils.clamp(ph.H / (Rkm * atmo.height), 0.02, 0.9), hm: ph.hm, tauR: ph.tauR, tauM: ph.tauM, tauO: ph.tauO, sun: 3.5 };
 }
 
 export class PlanetRenderer {
@@ -324,6 +367,7 @@ export class PlanetRenderer {
       uMoons: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] }, uMoonCount: { value: 0 },
       uHexagon: { value: def.id === 'saturn' ? 1 : 0 }, uDarkSpot: { value: def.id === 'neptune' ? 1 : 0 }, uPolarBright: { value: def.id === 'uranus' ? 1 : 0 }, uExposure: { value: 1 }, uNoTerminator: { value: 0 },
       uTint: { value: new THREE.Vector3(1, 1, 1) },
+      uTileUV: { value: new THREE.Vector4(0, 0, 1, 1) }, uNightTileUV: { value: new THREE.Vector4(0, 0, 1, 1) },
     };
     this.surfMat = new THREE.ShaderMaterial({ uniforms: u, vertexShader: surfVert, fragmentShader: surfFrag });
     this.surface = new THREE.Mesh(sphereGeo(96), this.surfMat);
@@ -332,7 +376,7 @@ export class PlanetRenderer {
 
     if (tex.cloud) {
       this.cloudMat = new THREE.ShaderMaterial({
-        uniforms: { uMap: { value: tex.cloud }, uSunDir: u.uSunDir, uCamLocal: u.uCamLocal, uTime: { value: 0 }, uOffset: { value: 0 }, uOpaque: { value: atmo?.thick ? 1 : 0 }, uExposure: { value: 1 }, uWarp: { value: atmo?.thick ? 0.004 : 0.006 }, uTint: { value: new THREE.Vector3(...(def.id === 'venus' ? [1.0, 0.92, 0.75] : [1, 1, 1])) } },
+        uniforms: { uMap: { value: tex.cloud }, uSunDir: u.uSunDir, uCamLocal: u.uCamLocal, uTime: { value: 0 }, uOffset: { value: 0 }, uOpaque: { value: atmo?.thick ? 1 : 0 }, uAlpha: { value: 1 }, uExposure: { value: 1 }, uWarp: { value: atmo?.thick ? 0.004 : 0.006 }, uTint: { value: new THREE.Vector3(...(def.id === 'venus' ? [1.0, 0.92, 0.75] : [1, 1, 1])) } },
         vertexShader: cloudVert, fragmentShader: cloudFrag, transparent: !atmo?.thick, depthWrite: !!atmo?.thick,
         blending: atmo?.thick ? THREE.NormalBlending : THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
       });
@@ -344,25 +388,54 @@ export class PlanetRenderer {
 
     if (atmo) {
       const h = atmo.height;
+      const ph = atmoPhysics(def, atmo);
       this.atmoMat = new THREE.ShaderMaterial({
         uniforms: {
-          uSunDir: u.uSunDir, uCamLocal: u.uCamLocal, uRayleigh: { value: new THREE.Vector3(...atmo.rayleigh) }, uMieColor: { value: new THREE.Vector3(...atmo.color) },
-          uPlanetR: { value: 1.0 }, uAtmoR: { value: 1 + h }, uHr: { value: 0.25 }, uHm: { value: 0.1 }, uDensity: { value: atmo.density }, uMie: { value: atmo.mie }, uExposure: { value: 1 }, uSunIntensity: { value: 20.0 }, uHaze: { value: atmo.thick ? 0.8 : 0 },
-          uSteps: { value: 12 }, uLightSteps: { value: 4 },
+          uSunDir: u.uSunDir, uCamLocal: u.uCamLocal, uTauR: { value: new THREE.Vector3(...atmo.rayleigh).multiplyScalar(ph.tauR) }, uTauO: { value: new THREE.Vector3(...(ph.tauO || [0, 0, 0])) }, uMieColor: { value: new THREE.Vector3(...atmo.color) },
+          uPlanetR: { value: 1.0 }, uAtmoR: { value: 1 + h }, uHr: { value: ph.hr }, uHm: { value: ph.hr * ph.hm }, uTauM: { value: ph.tauM }, uExposure: { value: 1 }, uSunIntensity: { value: ph.sun }, uHaze: { value: atmo.thick ? 0.8 : 0 },
+          uSteps: { value: 12 }, uOutside: { value: 1 },
         },
-        vertexShader: atmoVert, fragmentShader: atmoFrag, transparent: true, depthWrite: false, side: THREE.BackSide,
+        vertexShader: atmoVert, fragmentShader: atmoFrag, transparent: true, depthWrite: false, side: THREE.DoubleSide,
         blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
       });
       this.atmosphere = new THREE.Mesh(sphereGeo(64), this.atmoMat);
-      this.atmosphere.scale.setScalar(1 + h);
+      this.atmosphere.scale.setScalar((1 + h) * 1.012);   // slightly outside the analytic shell (polygon sag; camera sitting exactly on the shell)
       this.atmosphere.renderOrder = 62;
       this.group.add(this.atmosphere);
     }
     this._sunLocal = new THREE.Vector3(); this._camLocal = new THREE.Vector3();
+    this.tiles = undefined; this._hi = null; this._hiOn = false; this._hiFarSince = 0;
+  }
+
+  /** Swap the 2K maps for the local 8K ones while the planet is large on screen (high / ultra presets). */
+  _hiRes(rpx, eng) {
+    const id = this.body.def.id, spec = HIRES[id];
+    if (!spec || !eng.q.hiRes) return;
+    const u = this.surfMat.uniforms;
+    if (rpx > 260) {
+      this._hiFarSince = 0;
+      if (!this._hi) { this._hi = {}; for (const k of Object.keys(spec)) loadHiRes(spec[k], eng.renderer).then(tex => { if (this._hi) this._hi[k] = tex; }); }
+      if (!this._hiOn && this._hi.map) {
+        this._hiOn = true;
+        u.uMap.value = this._hi.map;
+        if (this._hi.night) u.uNightMap.value = this._hi.night;
+        if (this._hi.cloud) { u.uCloudMap.value = this._hi.cloud; if (this.cloudMat) this.cloudMat.uniforms.uMap.value = this._hi.cloud; }
+      }
+    } else if (this._hiOn && rpx < 120) {
+      this._hiOn = false;
+      u.uMap.value = this.tex.map; u.uNightMap.value = this.tex.night || this.tex.map;
+      if (this._hi.cloud) { u.uCloudMap.value = this.tex.cloud || this.tex.map; if (this.cloudMat) this.cloudMat.uniforms.uMap.value = this.tex.cloud; }
+      this._hiFarSince = performance.now();
+    } else if (!this._hiOn && this._hi && this._hiFarSince && performance.now() - this._hiFarSince > 90000) {
+      // long gone: free the GPU memory
+      for (const k of Object.keys(this._hi)) if (this._hi[k]) this._hi[k].dispose();
+      for (const k of Object.keys(spec)) loadHiRes.release(spec[k]);
+      this._hi = null; this._hiFarSince = 0;
+    }
   }
 
   /** moons: array of {position (world), radius} for shadows */
-  update(t, camPos, sunPos, rpx, moons = [], exposure = 1) {
+  update(t, camPos, sunPos, rpx, moons = [], exposure = 1, camera = null) {
     const b = this.body;
     const u = this.surfMat.uniforms;
     // sun direction & camera in local unit-sphere space
@@ -387,14 +460,26 @@ export class PlanetRenderer {
       const rotD = b.def.atmosphere?.cloudRotationD || 20;
       cu.uOffset.value = (this.body.manager.time.daysSinceJ2000 / rotD) % 1;
       u.uCloudOffset.value = cu.uOffset.value;
+      // thin (Earth-like) cloud decks fade out below ~0.25 radii so the surface tiles can be explored; thick decks (Venus) stay
+      const altR = u.uCamLocal.value.length() - 1;
+      const cf = b.def.atmosphere?.thick ? 1 : THREE.MathUtils.smoothstep(altR, 0.06, 0.3);
+      cu.uAlpha.value = cf; this._cloudOn = cf > 0.01;
     }
     if (this.atmoMat) {
       const au = this.atmoMat.uniforms;
       au.uExposure.value = exposure;
       // LOD steps
       const q = this.body.manager.engine.q;
-      au.uSteps.value = rpx > 400 ? q.atmoSteps : rpx > 60 ? Math.min(q.atmoSteps, 10) : 6;
-      au.uLightSteps.value = rpx > 400 ? q.atmoLight : 3;
+      au.uSteps.value = rpx > 400 ? Math.max(q.atmoSteps, 10) : rpx > 60 ? Math.max(Math.min(q.atmoSteps, 10), 8) : 6;
+      const outside = u.uCamLocal.value.length() > this.atmosphere.scale.x;
+      au.uOutside.value = outside ? 1 : 0; this.atmoMat.depthTest = outside;
+    }
+    // close-up detail: local 8K textures, then streamed NASA tiles (Earth, Moon, Mars, Mercury)
+    const eng = b.manager && b.manager.engine;
+    if (eng) {
+      if (this.tiles === undefined) this.tiles = (TILE_SOURCES[b.def.id] && eng.q.tiles > 0) ? new TileGlobe(this, TILE_SOURCES[b.def.id], eng.renderer, eng.q.tiles, eng.q.hiRes ? TILE_SOURCES[b.def.id].minHi : TILE_SOURCES[b.def.id].minLo) : null;
+      if (this.tiles && camera) { const focal = window.innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)); this.tiles.update(camera, u.uCamLocal.value, rpx, focal, eng.dt || 0.016); }
+      this._hiRes(rpx, eng);
     }
     // geometry LOD
     const seg = rpx > 500 ? 160 : rpx > 120 ? 96 : rpx > 24 ? 48 : 20;
@@ -402,7 +487,7 @@ export class PlanetRenderer {
     if (this.surface.geometry !== g) { this.surface.geometry = g; if (this.clouds) this.clouds.geometry = g; if (this.atmosphere) this.atmosphere.geometry = sphereGeo(Math.max(24, seg / 2 | 0)); }
     const vis = rpx > 0.8;
     this.surface.visible = vis;
-    if (this.clouds) this.clouds.visible = vis && rpx > 3;
+    if (this.clouds) this.clouds.visible = vis && rpx > 3 && this._cloudOn !== false;
     if (this.atmosphere) this.atmosphere.visible = vis && rpx > 2;
   }
 }

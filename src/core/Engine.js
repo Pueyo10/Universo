@@ -4,6 +4,8 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { FinalPass } from '../postfx/FinalPass.js';
 import { BlackHolePass } from '../postfx/BlackHolePass.js';
+import { TAAPass } from '../postfx/TAAPass.js';
+import { ExposurePass } from '../postfx/ExposurePass.js';
 import { bus } from './EventBus.js';
 
 // Quality presets. `pixelRatio` is the ceiling: dynamic resolution scaling may
@@ -12,10 +14,10 @@ import { bus } from './EventBus.js';
 //  skyTiers   : procedural background star tiers (3 = skip the ultra-faint tier)
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 export const QUALITY = {
-  low:    { pixelRatio: Math.min(DPR, 1.0), minScale: 0.45, bloomScale: 0.25, galaxyStars: 150000, chunkStars: 0.35, nebulaSteps: 24, nebulaScale: 0.35, atmoSteps: 6, atmoLight: 3, samples: 0, ringParticles: 4000, asteroids: 5000, skyTiers: 3, skyGalaxies: 1 },
-  medium: { pixelRatio: Math.min(DPR, 1.0), minScale: 0.5,  bloomScale: 0.35, galaxyStars: 300000, chunkStars: 0.6,  nebulaSteps: 36, nebulaScale: 0.5,  atmoSteps: 10, atmoLight: 4, samples: 0, ringParticles: 12000, asteroids: 12000, skyTiers: 4, skyGalaxies: 2 },
-  high:   { pixelRatio: Math.min(DPR, 1.5), minScale: 0.55, bloomScale: 0.5,  galaxyStars: 550000, chunkStars: 1.0,  nebulaSteps: 48, nebulaScale: 0.5,  atmoSteps: 14, atmoLight: 5, samples: 0, ringParticles: 26000, asteroids: 24000, skyTiers: 4, skyGalaxies: 2 },
-  ultra:  { pixelRatio: Math.min(DPR, 2.0), minScale: 0.6,  bloomScale: 0.5,  galaxyStars: 900000, chunkStars: 1.4,  nebulaSteps: 72, nebulaScale: 0.75, atmoSteps: 16, atmoLight: 6, samples: 4, ringParticles: 40000, asteroids: 40000, skyTiers: 4, skyGalaxies: 2 },
+  low:    { pixelRatio: Math.min(DPR, 1.0), minScale: 0.45, bloomScale: 0.25, galaxyStars: 150000, chunkStars: 0.35, nebulaSteps: 24, nebulaScale: 0.35, atmoSteps: 6, atmoLight: 3, samples: 0, ringParticles: 4000, asteroids: 5000, skyTiers: 3, skyGalaxies: 1, taa: false, tiles: 5, hiRes: false },
+  medium: { pixelRatio: Math.min(DPR, 1.0), minScale: 0.5,  bloomScale: 0.35, galaxyStars: 300000, chunkStars: 0.6,  nebulaSteps: 36, nebulaScale: 0.5,  atmoSteps: 10, atmoLight: 4, samples: 0, ringParticles: 12000, asteroids: 12000, skyTiers: 4, skyGalaxies: 2, taa: true, tiles: 7, hiRes: false },
+  high:   { pixelRatio: Math.min(DPR, 1.5), minScale: 0.55, bloomScale: 0.5,  galaxyStars: 550000, chunkStars: 1.0,  nebulaSteps: 48, nebulaScale: 0.5,  atmoSteps: 14, atmoLight: 5, samples: 0, ringParticles: 26000, asteroids: 24000, skyTiers: 4, skyGalaxies: 2, taa: true, tiles: 8, hiRes: true },
+  ultra:  { pixelRatio: Math.min(DPR, 2.0), minScale: 0.6,  bloomScale: 0.5,  galaxyStars: 900000, chunkStars: 1.4,  nebulaSteps: 72, nebulaScale: 0.75, atmoSteps: 16, atmoLight: 6, samples: 0, ringParticles: 40000, asteroids: 40000, skyTiers: 4, skyGalaxies: 2, taa: true, tiles: 8, hiRes: true },
 };
 
 /** Pick a preset from the GPU renderer string (dynamic resolution fine-tunes from there). */
@@ -105,20 +107,30 @@ export class Engine {
       samples: this.q.samples, depthBuffer: true, stencilBuffer: false,
     });
     this.composer = new EffectComposer(renderer, rt);
+    // the scene colour buffers carry a float depth texture: the TAA pass reprojects against it
+    for (const t of [this.composer.renderTarget1, this.composer.renderTarget2]) { const d = new THREE.DepthTexture(size.x, size.y); d.type = THREE.FloatType; t.depthTexture = d; }
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(this.renderPass);
+    this.taa = new TAAPass(this.camera, size.x, size.y);
+    this.taa.enabled = !!this.q.taa && !new URLSearchParams(location.search).has('notaa');
+    this.composer.addPass(this.taa);
     this.blackHolePass = new BlackHolePass(this.camera);
     this.blackHolePass.enabled = false;          // enabled by BlackHole only when lensing is on screen
     this.composer.addPass(this.blackHolePass);
     this.bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x * this.q.bloomScale, size.y * this.q.bloomScale), 0.9, 0.55, 1.0);
-    this.bloomPass.threshold = 1.5; this.bloomPass.strength = 0.9; this.bloomPass.radius = 0.45;
+    this.bloomPass.threshold = 1.1; this.bloomPass.strength = 0.9; this.bloomPass.radius = 0.45;
+    this.bloomPass.materialHighPassFilter.uniforms.smoothWidth.value = 0.7;   // soft knee: no hard cut between glowing and not
     // NaN/Inf scrub in the bloom high-pass (a single bad pixel would otherwise blacken the whole blur)
     this.bloomPass.materialHighPassFilter.fragmentShader = this.bloomPass.materialHighPassFilter.fragmentShader.replace(
       'vec4 texel = texture2D( tDiffuse, vUv );',
       'vec4 texel = texture2D( tDiffuse, vUv );\n\t\t\tbvec3 bad = bvec3(isnan(texel.r) || isinf(texel.r), isnan(texel.g) || isinf(texel.g), isnan(texel.b) || isinf(texel.b));\n\t\t\ttexel.rgb = clamp(mix(texel.rgb, vec3(0.0), vec3(bad)), 0.0, 64.0);');
     this.bloomPass.materialHighPassFilter.needsUpdate = true;
     this.composer.addPass(this.bloomPass);
+    // image-based auto exposure (adapted mean log-luminance), read by the final pass
+    this.exposurePass = new ExposurePass();
+    this.composer.addPass(this.exposurePass);
     this.finalPass = new FinalPass();
+    this.finalPass.uniforms.tLum.value = this.exposurePass.texture;
     this.composer.addPass(this.finalPass);
 
     // ------ GPU timing (for dynamic resolution) ------
@@ -147,6 +159,7 @@ export class Engine {
     else if (QUALITY[name]) this.qualityMode = name;
     else return;
     this.qualityName = name; this.q = QUALITY[name];
+    this.taa.enabled = !!this.q.taa;
     this.renderScale = 1;
     this._perf.lastChange = this.time; this._perf.backoffUntil = this.time + 3;
     this._applyScale();
@@ -165,6 +178,7 @@ export class Engine {
     this.camera.updateProjectionMatrix();
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     this.composer.setSize(size.x, size.y);
+    if (this.taa) this.taa.setSize(size.x, size.y);
     this.bloomPass.setSize(Math.max(8, Math.round(size.x * this.q.bloomScale)), Math.max(8, Math.round(size.y * this.q.bloomScale)));
     this.finalPass.setSize(size.x, size.y);
     this.blackHolePass.setSize(size.x, size.y);
@@ -252,6 +266,12 @@ export class Engine {
   render() {
     this.camera.fov = this.settings.fov * (this.fovMultiplier || 1);
     this.camera.updateProjectionMatrix();
+    // sub-pixel jitter for the temporal AA (the pass reprojects the previous frame against this camera)
+    const dbs = this.renderer.getDrawingBufferSize(this._dbs || (this._dbs = new THREE.Vector2()));
+    this.taa.jitter(dbs.x, dbs.y); this.taa.camPos.copy(this.camera.position);
+    this.exposurePass.dt = this.dt;
+    this.finalPass.uniforms.tLum.value = this.exposurePass.texture;
+    this.finalPass.uniforms.uAutoExp.value = this.settings.autoExposure ? 1 : 0;
     this.bloomPass.strength = this.settings.bloom + (this.bloomBoost || 0);
     this.finalPass.uniforms.uLens.value = this.settings.lens ? 1 : 0;
     this.finalPass.uniforms.uTime.value = this.time;
