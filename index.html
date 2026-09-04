@@ -9,10 +9,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%225%22 fill=%22%23fff%22/%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2212%22 fill=%22none%22 stroke=%22%237fb4ff%22 stroke-width=%221.5%22 opacity=%22.7%22/%3E%3C/svg%3E" />
-  <script type="module" crossorigin src="./assets/index-D_158ioN.js"></script>
+  <script type="module" crossorigin src="./assets/index-CKGQ5RVM.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/three.core-CpYT6u8q.js">
   <link rel="modulepreload" crossorigin href="./assets/EventBus-DzLmJ1Bg.js">
-  <link rel="modulepreload" crossorigin href="./assets/Units-B32s_xJl.js">
+  <link rel="modulepreload" crossorigin href="./assets/Units-BUZL48Ps.js">
   <link rel="modulepreload" crossorigin href="./assets/Random-BQY5ImTV.js">
   <link rel="stylesheet" crossorigin href="./assets/index-CdZH4sWA.css">
 </head>
@@ -155,6 +155,7 @@
         <label class="row"><span data-i18n="roll">Roll</span><input id="photo-roll" type="range" min="-180" max="180" step="0.5" value="0"></label>
         <label class="row"><span data-i18n="grain">Grain</span><input id="photo-grain" type="range" min="0" max="0.12" step="0.005" value="0.03"></label>
         <label class="row"><span data-i18n="vignette">Vignette</span><input id="photo-vignette" type="range" min="0" max="0.9" step="0.01" value="0.32"></label>
+        <label class="row"><span data-i18n="aperture">Aperture (depth of field)</span><input id="photo-aperture" type="range" min="0" max="1" step="0.01" value="0"></label>
         <label class="row"><span data-i18n="labels">Labels</span><input id="photo-labels" type="checkbox"></label>
         <div class="row row-btns"><button class="btn" id="photo-pause" data-i18n="pauseTime">Pause / resume time</button><button class="btn" id="photo-hide" data-i18n="photoHide">Hide this panel</button></div>
         <div class="panel-foot" data-i18n="photoNote">Use your browser or OS screenshot tool to capture. H hides everything else.</div>
@@ -261,6 +262,8 @@
         <label class="row"><span data-i18n="sensitivity">Mouse sensitivity</span><input id="set-sens" type="range" min="0.3" max="2.5" step="0.05" value="1"></label>
         <label class="row"><span data-i18n="autoExposure">Auto exposure</span><input id="set-autoexp" type="checkbox" checked></label>
         <label class="row"><span data-i18n="lensEffects">Lens effects</span><input id="set-lens" type="checkbox" checked></label>
+        <label class="row"><span data-i18n="motionBlur">Motion blur</span><input id="set-motion" type="checkbox" checked></label>
+        <label class="row"><span data-i18n="dof">Depth of field</span><input id="set-dof" type="checkbox" checked></label>
         <label class="row"><span data-i18n="discoveryToggle">Discoveries &amp; facts</span><input id="set-discovery" type="checkbox" checked></label>
         <label class="row"><span data-i18n="invertY">Invert Y</span><input id="set-inverty" type="checkbox"></label>
         <div class="panel-foot" data-i18n="credits">Planet textures © Solar System Scope (CC BY 4.0). Everything else is procedural.</div>
