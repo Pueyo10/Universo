@@ -14,10 +14,10 @@ import { bus } from './EventBus.js';
 //  skyTiers   : procedural background star tiers (3 = skip the ultra-faint tier)
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 export const QUALITY = {
-  low:    { pixelRatio: Math.min(DPR, 1.0), minScale: 0.45, bloomScale: 0.25, galaxyStars: 150000, chunkStars: 0.35, nebulaSteps: 24, nebulaScale: 0.35, atmoSteps: 6, atmoLight: 3, samples: 0, ringParticles: 4000, asteroids: 5000, skyTiers: 3, skyGalaxies: 1, taa: false, tiles: 5, hiRes: false },
-  medium: { pixelRatio: Math.min(DPR, 1.0), minScale: 0.5,  bloomScale: 0.35, galaxyStars: 300000, chunkStars: 0.6,  nebulaSteps: 36, nebulaScale: 0.5,  atmoSteps: 10, atmoLight: 4, samples: 0, ringParticles: 12000, asteroids: 12000, skyTiers: 4, skyGalaxies: 2, taa: true, tiles: 7, hiRes: false },
-  high:   { pixelRatio: Math.min(DPR, 1.5), minScale: 0.55, bloomScale: 0.5,  galaxyStars: 550000, chunkStars: 1.0,  nebulaSteps: 48, nebulaScale: 0.5,  atmoSteps: 14, atmoLight: 5, samples: 0, ringParticles: 26000, asteroids: 24000, skyTiers: 4, skyGalaxies: 2, taa: true, tiles: 8, hiRes: true },
-  ultra:  { pixelRatio: Math.min(DPR, 2.0), minScale: 0.6,  bloomScale: 0.5,  galaxyStars: 900000, chunkStars: 1.4,  nebulaSteps: 72, nebulaScale: 0.75, atmoSteps: 16, atmoLight: 6, samples: 0, ringParticles: 40000, asteroids: 40000, skyTiers: 4, skyGalaxies: 2, taa: true, tiles: 8, hiRes: true },
+  low:    { pixelRatio: Math.min(DPR, 1.0), minScale: 0.45, bloomScale: 0.25, galaxyStars: 150000, chunkStars: 0.35, nebulaSteps: 24, nebulaScale: 0.35, atmoSteps: 6, atmoLight: 3, samples: 0, ringParticles: 4000, asteroids: 5000, skyTiers: 3, skyGalaxies: 1, taa: false, tiles: 5, hiRes: false, motion: false, dof: false },
+  medium: { pixelRatio: Math.min(DPR, 1.0), minScale: 0.5,  bloomScale: 0.35, galaxyStars: 300000, chunkStars: 0.6,  nebulaSteps: 36, nebulaScale: 0.5,  atmoSteps: 10, atmoLight: 4, samples: 0, ringParticles: 12000, asteroids: 12000, skyTiers: 4, skyGalaxies: 2, taa: true, tiles: 7, hiRes: false, motion: true, dof: false },
+  high:   { pixelRatio: Math.min(DPR, 1.5), minScale: 0.55, bloomScale: 0.5,  galaxyStars: 550000, chunkStars: 1.0,  nebulaSteps: 48, nebulaScale: 0.5,  atmoSteps: 14, atmoLight: 5, samples: 0, ringParticles: 26000, asteroids: 24000, skyTiers: 4, skyGalaxies: 2, taa: true, tiles: 8, hiRes: true, motion: true, dof: true },
+  ultra:  { pixelRatio: Math.min(DPR, 2.0), minScale: 0.6,  bloomScale: 0.5,  galaxyStars: 900000, chunkStars: 1.4,  nebulaSteps: 72, nebulaScale: 0.75, atmoSteps: 16, atmoLight: 6, samples: 0, ringParticles: 40000, asteroids: 40000, skyTiers: 4, skyGalaxies: 2, taa: true, tiles: 8, hiRes: true, motion: true, dof: true },
 };
 
 /** Pick a preset from the GPU renderer string (dynamic resolution fine-tunes from there). */
@@ -36,7 +36,9 @@ export function detectQuality(gl) {
 export class Engine {
   constructor(canvas, qualityName = 'auto') {
     this.canvas = canvas;
-    this.settings = { bloom: 0.9, exposure: 1.0, autoExposure: true, lens: true, fov: 55, starDensity: 1.0 };
+    this.settings = { bloom: 0.9, exposure: 1.0, autoExposure: true, lens: true, motionBlur: true, dof: true, fov: 55, starDensity: 1.0 };
+    this.motionIntensity = 0.3;   // set by the UI: 0.3 baseline (camera turns), 1 during travel / tours / flight
+    this.dofAperture = 0; this.dofFocus = 1;   // set by the UI (photo mode aperture, mild during tours); focus in world units
 
     const renderer = new THREE.WebGLRenderer({
       canvas, antialias: false, alpha: false, stencil: false, depth: true,
@@ -167,8 +169,10 @@ export class Engine {
   }
 
   _applyScale() {
-    this.renderer.setPixelRatio(this.q.pixelRatio * this.renderScale);
-    this.resize();
+    // with TAA the scene is rendered into a fraction of the full-size targets and the temporal pass reconstructs the full
+    // image (TAAU): the drawing buffer keeps its size. Without TAA fall back to a smaller drawing buffer.
+    const pr = this.taa && this.taa.enabled ? this.q.pixelRatio : this.q.pixelRatio * this.renderScale;
+    if (Math.abs(this.renderer.getPixelRatio() - pr) > 1e-6) { this.renderer.setPixelRatio(pr); this.resize(); }
   }
 
   resize() {
@@ -268,7 +272,15 @@ export class Engine {
     this.camera.updateProjectionMatrix();
     // sub-pixel jitter for the temporal AA (the pass reprojects the previous frame against this camera)
     const dbs = this.renderer.getDrawingBufferSize(this._dbs || (this._dbs = new THREE.Vector2()));
-    this.taa.jitter(dbs.x, dbs.y); this.taa.camPos.copy(this.camera.position);
+    const up = this.taa.enabled, rs = up ? this.renderScale : 1;
+    const vw = Math.max(8, Math.round(dbs.x * rs)), vh = Math.max(8, Math.round(dbs.y * rs));
+    for (const t of [this.composer.renderTarget1, this.composer.renderTarget2]) { t.viewport.set(0, 0, vw, vh); t.scissor.set(0, 0, vw, vh); t.scissorTest = rs < 1; }
+    this.taa.setScale(vw / dbs.x, vh / dbs.y);
+    this.taa.jitter(vw, vh); this.taa.camPos.copy(this.camera.position);
+    this.taa.pixelRatio = this.renderer.getPixelRatio();
+    this.taa.motionBlur = this.settings.motionBlur && this.q.motion ? this.motionIntensity : 0;
+    this.taa.dof.aperture = this.settings.dof && this.q.dof ? this.dofAperture : 0;
+    this.taa.dof.focus = this.dofFocus;
     this.exposurePass.dt = this.dt;
     this.finalPass.uniforms.tLum.value = this.exposurePass.texture;
     this.finalPass.uniforms.uAutoExp.value = this.settings.autoExposure ? 1 : 0;

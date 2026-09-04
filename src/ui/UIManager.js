@@ -130,6 +130,8 @@ export class UIManager {
     $('set-sens').addEventListener('input', e => { this.cameraCtl.sensitivity = Number(e.target.value); });
     $('set-autoexp').addEventListener('change', e => { s.autoExposure = e.target.checked; });
     $('set-lens').addEventListener('change', e => { s.lens = e.target.checked; });
+    $('set-motion').addEventListener('change', e => { s.motionBlur = e.target.checked; });
+    $('set-dof').addEventListener('change', e => { s.dof = e.target.checked; });
     $('set-discovery').addEventListener('change', e => { this.discovery.enabled = this.discovery.factsEnabled = e.target.checked; });
     $('set-inverty').addEventListener('change', e => { this.cameraCtl.invertY = e.target.checked; });
     document.addEventListener('pointerdown', e => { if (!$('search').contains(e.target)) this._hideSearch(); });
@@ -297,6 +299,23 @@ export class UIManager {
   }
 
   /** PHOTO MODE: manual exposure / FOV / roll / grain / vignette, UI hidden, time paused. */
+  /** Camera motion blur strength and depth of field (photo-mode aperture, a mild one during tours) for the temporal pass. */
+  _updateCinematics() {
+    const e = this.engine, cc = this.cameraCtl;
+    const moving = !!cc.travel || cc.mode === 'SHIP' || !!cc.tourActive;
+    e.motionIntensity = moving ? 1 : 0.3;
+    const photo = !$('photo-panel').hidden;
+    const ap = photo ? this._photoAperture : (cc.tourActive ? 0.3 : 0);
+    e.dofAperture = ap;
+    if (ap > 0) {
+      // focus on the target (or the nearest body): its near surface, so a moon in the foreground stays sharp
+      const n = cc.nearest, tgt = cc.target || (n && n.obj);
+      let f = Infinity;
+      if (tgt && tgt.getPosition) f = tgt.getPosition(this._v).distanceTo(cc.position) - (tgt.radius || 0) * 0.6;
+      e.dofFocus = Math.max(f, 1e-4);
+    }
+  }
+
   togglePhotoMode() {
     const p = $('photo-panel');
     const on = p.hidden;
@@ -320,6 +339,8 @@ export class UIManager {
     $('photo-roll').addEventListener('input', e => { this.cameraCtl.roll = Number(e.target.value) * Math.PI / 180; });
     $('photo-grain').addEventListener('input', e => { fp.uGrain.value = Number(e.target.value); });
     $('photo-vignette').addEventListener('input', e => { fp.uVignette.value = Number(e.target.value); });
+    this._photoAperture = 0;
+    $('photo-aperture').addEventListener('input', e => { this._photoAperture = Number(e.target.value); });
     $('photo-labels').addEventListener('change', e => { $('labels').style.opacity = e.target.checked ? 1 : 0; });
     $('photo-pause').addEventListener('click', () => this.time.toggle());
     $('photo-hide').addEventListener('click', () => { $('photo-panel').classList.toggle('ghost'); });
@@ -461,6 +482,7 @@ export class UIManager {
   // ------------------------------------------------------------- per-frame
   update(dt) {
     this._t += dt;
+    this._updateCinematics();
     this.labels.hoverObj = this.selection.hovered;
     this.selection.update();
     this.labels.update();

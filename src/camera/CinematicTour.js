@@ -43,7 +43,7 @@ export class CinematicTour {
   _begin(steps, id, speed) {
     if (this.active) this._end();
     this.steps = steps; this.tourId = id;
-    this.active = true; this.step = -1; this.phase = 'travel'; this.paused = false; this.cameraCtl.travelPaused = false;
+    this.active = true; this.step = -1; this.phase = 'travel'; this.paused = false; this.cameraCtl.travelPaused = false; this.cameraCtl.tourActive = true;
     this.prevSpeed = this.time.effectiveSpeed;
     this.prevHz = this.ui.state.habitable;
     this.time.setSpeed(speed);
@@ -55,7 +55,7 @@ export class CinematicTour {
   }
 
   _end() {
-    this.active = false; this.phase = 'idle'; this.paused = false; this.cameraCtl.travelPaused = false;
+    this.active = false; this.phase = 'idle'; this.paused = false; this.cameraCtl.travelPaused = false; this.cameraCtl.tourActive = false;
     const i = this.engine.systems.indexOf(this.sys); if (i >= 0) this.engine.systems.splice(i, 1);
     this.cameraCtl.inputEnabled = true;
     if (this.cameraCtl.travel) { this.cameraCtl.travel.onArrive = null; }
