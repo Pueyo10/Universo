@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TileCache, textureBytes } from './TileCache.js';
 
 // Streamed high-resolution surfaces ("zoom in like a map"): a quadtree of
 // equirectangular tiles fetched from NASA WMTS services (GIBS Blue Marble /
@@ -28,10 +29,11 @@ export const HIRES = {
 };
 
 const DEG = Math.PI / 180;
-const MAX_TEX = 260;
 const CONCURRENCY = 6;
+const resources = new WeakMap();
+const IDENTITY_UV = new THREE.Vector4(0, 0, 1, 1);
 
-function tileGeometry(lon0, lon1, lat0, lat1, seg) {
+export function tileGeometry(lon0, lon1, lat0, lat1, seg) {
   // same convention as THREE.SphereGeometry: u = phi / 2π with x = -cos(phi) sin(theta), z = sin(phi) sin(theta), v = 1 - theta/π
   const pos = [], nrm = [], uv = [], idx = [];
   for (let j = 0; j <= seg; j++) {
@@ -45,6 +47,19 @@ function tileGeometry(lon0, lon1, lat0, lat1, seg) {
     }
   }
   for (let j = 0; j < seg; j++) for (let i = 0; i < seg; i++) { const a = j * (seg + 1) + i, b = a + seg + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+  // Cover the chord gap between a coarse neighbour and a finer spherical edge.
+  const edge = [];
+  for (let i = 0; i < seg; i++) edge.push(i);
+  for (let j = 0; j < seg; j++) edge.push(j * (seg + 1) + seg);
+  for (let i = seg; i > 0; i--) edge.push(seg * (seg + 1) + i);
+  for (let j = seg; j > 0; j--) edge.push(j * (seg + 1));
+  const first = pos.length / 3;
+  const inset = Math.max(1e-6, 1 - Math.cos(Math.max(lon1 - lon0, lat1 - lat0) * DEG / seg) + 2e-5);
+  for (const k of edge) {
+    pos.push(pos[k * 3] * (1 - inset), pos[k * 3 + 1] * (1 - inset), pos[k * 3 + 2] * (1 - inset));
+    nrm.push(nrm[k * 3], nrm[k * 3 + 1], nrm[k * 3 + 2]); uv.push(uv[k * 2], uv[k * 2 + 1]);
+  }
+  for (let i = 0; i < edge.length; i++) { const j = (i + 1) % edge.length; idx.push(edge[i], first + i, edge[j], first + i, first + j, edge[j]); }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx); g.computeBoundingSphere();
@@ -63,6 +78,7 @@ class Tile {
     this.center = new THREE.Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta));
     this.halfAngle = d * DEG * 0.72;
     this.children = null; this.mesh = null; this.tex = null; this.nightTex = null; this.state = 'idle'; this.nightState = 'idle'; this.lastUsed = 0;
+    this.parent = null; this.split = false; this.fade = 0; this.nightFade = 0; this.fallback = undefined;
     this.uvRect = new THREE.Vector4((this.lon0 + 180) / 360, (this.lat0 + 90) / 180, 360 / (this.lon1 - this.lon0), 180 / (this.lat1 - this.lat0));
   }
   get key() { return `${this.z}/${this.r}/${this.c}`; }
@@ -80,6 +96,9 @@ export class TileGlobe {
     const d = src.deg(src.root), cols = Math.ceil(360 / d), rows = Math.ceil(180 / d);
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) this.roots.push(new Tile(src.root, r, c, src));
     this.cache = new Map(); this.loading = 0; this.queue = [];
+    if (!resources.has(renderer)) resources.set(renderer, { cache: new TileCache(), loading: 0, pending: [], frame: -1, uploads: 0 });
+    this.resources = resources.get(renderer);
+    this._usedTextures = new Set(); this._lastUpdate = 0;
     this.active = false; this.visibleCount = 0; this.time = 0;
     this._v = new THREE.Vector3(); this._v2 = new THREE.Vector3(); this._frustum = new THREE.Frustum(); this._m4 = new THREE.Matrix4(); this._sphere = new THREE.Sphere();
     this.aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
@@ -87,10 +106,13 @@ export class TileGlobe {
   }
 
   /** camera: THREE camera; camLocal: camera in the planet's unit-sphere frame; rpx: planet radius in px; focalPx: h / (2 tan(fov/2)). */
-  update(camera, camLocal, rpx, focalPx, dt) {
+  update(camera, camLocal, rpx, focalPx, dt, frame = 0) {
     this.time += dt;
+    this.dt = dt; this._lastUpdate = performance.now();
+    this._flushUploads(frame);
+    this._usedTextures.clear();
     const wasActive = this.active;
-    this.active = rpx > 420;
+    this.active = rpx > (wasActive ? 380 : 440);
     if (!this.active) { if (wasActive) this._hideAll(this.roots); return; }
     this.visibleCount = 0; this.queue.length = 0;
     const camDist = camLocal.length();
@@ -100,9 +122,8 @@ export class TileGlobe {
     this._world = this.planet.group.matrixWorld; this._radiusWorld = this.planet.body.radius;
     for (const t of this.roots) this._visit(t, camera, camLocal, camDir, horizon, focalPx);
     // load by priority (largest on screen first)
-    this.queue.sort((a, b) => b.pri - a.pri);
-    for (const q of this.queue) { if (this.loading >= CONCURRENCY) break; this._load(q.tile, q.night); }
-    this._evict();
+    this.queue.sort((a, b) => Number(a.night) - Number(b.night) || b.pri - a.pri);
+    for (const q of this.queue) { if (this.resources.loading >= CONCURRENCY || this.resources.pending.length >= 8) break; this._load(q.tile, q.night); }
   }
 
   /** Returns true when everything visible inside this tile's footprint is drawn (by ready tiles, or nothing of it is on screen). */
@@ -119,21 +140,22 @@ export class TileGlobe {
     this._sphere.center.copy(t.center).applyMatrix4(this._world);
     this._sphere.radius = chord * 0.75 * this._radiusWorld;
     if (!this._frustum.intersectsSphere(this._sphere)) { this._hide(t); return true; }
-    const wantSplit = t.z < this.maxZ && px > this.src.size * 1.35;
+    const wantSplit = t.z < this.maxZ && px > this.src.size * (t.split ? 1.1 : 1.5);
+    t.split = wantSplit;
     if (wantSplit) {
       if (!t.children) this._split(t);
       let covered = true;
       for (const c of t.children) if (!this._visit(c, camera, camLocal, camDir, horizon, focalPx)) covered = false;
       if (covered) { this._hide(t, false); return true; }      // the visible children draw everything: no need for this tile
     } else if (t.children) this._hideAll(t.children);
-    t.lastUsed = this.time;
+    t.lastUsed = performance.now();
     if (t.z < this.minShow) { this._hide(t, false); return false; }
     if (t.state === 'ready') {
       this._show(t); this.visibleCount++;
       if (this.src.night && t.z <= this.src.night.max && t.nightState === 'idle') this.queue.push({ tile: t, pri: px * 0.5, night: true });
-      return true;
+      return t.fade >= 1;
     }
-    if (t.state === 'idle') this.queue.push({ tile: t, pri: px, night: false });
+    if (t.state === 'idle') this.queue.push({ tile: t, pri: px / Math.max(1, t.z - this.minShow + 1), night: false });
     this._hide(t, false); return false;
   }
   _childHidden(c, camDir, horizon) { return c.center.dot(camDir) < horizon - Math.sin(c.halfAngle) - 0.02; }
@@ -143,20 +165,40 @@ export class TileGlobe {
     for (let dr = 0; dr < 2; dr++) for (let dc = 0; dc < 2; dc++) {
       const c = new Tile(t.z + 1, t.r * 2 + dr, t.c * 2 + dc, this.src);
       if (c.lat1 <= -90 || c.lon0 >= 180) continue;
-      t.children.push(c);
+      c.parent = t; t.children.push(c);
     }
   }
 
   _show(t) {
+    const base = this.planet.surfMat;
+    if (t.fallback === undefined) {
+      let p = t.parent;
+      while (p && (!p.tex || p.fade < 1)) p = p.parent;
+      t.fallback = p;
+    }
+    const fallback = t.fallback?.tex || base.uniforms.uMap.value;
+    let nightParent = t.parent;
+    while (nightParent && (!nightParent.nightTex || nightParent.nightFade < 1)) nightParent = nightParent.parent;
+    const fallbackNight = nightParent?.nightTex || base.uniforms.uNightMap.value;
+    this._usedTextures.add(t.tex); this._usedTextures.add(fallback);
+    this._usedTextures.add(fallbackNight);
+    if (t.nightTex) this._usedTextures.add(t.nightTex);
+    t.fade = Math.min(1, t.fade + this.dt / 0.3);
+    if (t.nightTex) t.nightFade = Math.min(1, t.nightFade + this.dt / 0.4);
     if (!t.mesh) {
-      const base = this.planet.surfMat;
-      const u = Object.assign({}, base.uniforms, { uMap: { value: t.tex }, uTileUV: { value: t.uvRect }, uNightMap: { value: t.nightTex || base.uniforms.uNightMap.value }, uNightTileUV: { value: t.nightTex ? t.uvRect : new THREE.Vector4(0, 0, 1, 1) } });
-      const mat = new THREE.ShaderMaterial({ uniforms: u, vertexShader: base.vertexShader, fragmentShader: base.fragmentShader, defines: { TILE_BIAS: ((t.z + 1) * 1.5e-7).toExponential(2) } });
-      t.mesh = new THREE.Mesh(tileGeometry(t.lon0, t.lon1, t.lat0, t.lat1, 12), mat);
+      const u = Object.assign({}, base.uniforms, { uMap: { value: t.tex }, uTileUV: { value: t.uvRect }, uNightMap: { value: t.nightTex || base.uniforms.uNightMap.value }, uNightTileUV: { value: t.nightTex ? t.uvRect : IDENTITY_UV }, uParentMap: { value: fallback }, uParentUV: { value: t.fallback?.uvRect || IDENTITY_UV }, uBaseMap: base.uniforms.uMap, uBaseNight: base.uniforms.uNightMap, uTileFade: { value: 0 }, uNightFade: { value: 0 }, uTileSize: { value: this.src.size } });
+      const mat = new THREE.ShaderMaterial({ uniforms: u, vertexShader: base.vertexShader, fragmentShader: base.fragmentShader, defines: { TILE_BIAS: ((t.z + 1) * 1.5e-7).toExponential(2), TILE_SURFACE: 1 } });
+      u.uParentNight = { value: fallbackNight }; u.uParentNightUV = { value: nightParent?.uvRect || IDENTITY_UV };
+      t.mesh = new THREE.Mesh(tileGeometry(t.lon0, t.lon1, t.lat0, t.lat1, 16), mat);
       t.mesh.renderOrder = 61; t.mesh.frustumCulled = false;
       this.group.add(t.mesh);
     }
-    if (t.nightTex && t.mesh.material.uniforms.uNightMap.value !== t.nightTex) { t.mesh.material.uniforms.uNightMap.value = t.nightTex; t.mesh.material.uniforms.uNightTileUV.value = t.uvRect; }
+    const u = t.mesh.material.uniforms;
+    u.uParentMap.value = fallback; u.uParentUV.value = t.fallback?.tex ? t.fallback.uvRect : IDENTITY_UV;
+    u.uNightMap.value = t.nightTex || base.uniforms.uNightMap.value;
+    u.uParentNight.value = fallbackNight; u.uParentNightUV.value = nightParent?.uvRect || IDENTITY_UV;
+    u.uNightTileUV.value = t.nightTex ? t.uvRect : IDENTITY_UV;
+    u.uTileFade.value = t.fade; u.uNightFade.value = t.nightFade;
     t.mesh.visible = true;
   }
   _hide(t, deep = true) { if (t.mesh) t.mesh.visible = false; if (deep && t.children) this._hideAll(t.children); }
@@ -165,32 +207,55 @@ export class TileGlobe {
   async _load(t, night) {
     const src = night ? this.src.night : this.src;
     if (night) t.nightState = 'loading'; else t.state = 'loading';
-    this.loading++;
+    this.loading++; this.resources.loading++;
     try {
       const res = await fetch(src.url(t.z, t.r, t.c), { mode: 'cors' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
       // WebGL ignores UNPACK_FLIP_Y for ImageBitmap sources: bake the flip into the bitmap so v = 1 is the northern edge
-      const bmp = await createImageBitmap(blob, { imageOrientation: 'flipY', premultiplyAlpha: 'none' });
-      const tex = new THREE.Texture(bmp);
-      tex.flipY = false; tex.colorSpace = THREE.NoColorSpace; tex.anisotropy = this.aniso; tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping; tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.needsUpdate = true;
-      if (night) { t.nightTex = tex; t.nightState = 'ready'; } else { t.tex = tex; t.state = 'ready'; }
-      this.cache.set(t.key + (night ? ':n' : ''), t);
+      const bmp = await createImageBitmap(blob, { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+      if (night) t.nightState = 'decoded'; else t.state = 'decoded';
+      this.resources.pending.push({ owner: this, tile: t, night, bmp });
     } catch (e) {
       if (night) t.nightState = 'failed'; else t.state = 'failed';
       setTimeout(() => { if (night) t.nightState = 'idle'; else t.state = 'idle'; }, 20000);
-    } finally { this.loading--; }
+    } finally { this.loading--; this.resources.loading--; }
   }
 
-  _evict() {
-    if (this.cache.size <= MAX_TEX) return;
-    const arr = [...this.cache.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed);
-    for (let i = 0; i < arr.length - MAX_TEX; i++) {
-      const [key, t] = arr[i];
-      if (this.time - t.lastUsed < 8) break;
-      if (key.endsWith(':n')) { if (t.nightTex) { t.nightTex.dispose(); t.nightTex = null; } t.nightState = 'idle'; }
-      else { if (t.mesh) { this.group.remove(t.mesh); t.mesh.geometry.dispose(); t.mesh.material.dispose(); t.mesh = null; } if (t.tex) { t.tex.dispose(); t.tex = null; } t.state = 'idle'; }
-      this.cache.delete(key);
+  _flushUploads(frame) {
+    const shared = this.resources;
+    if (shared.frame !== frame) { shared.frame = frame; shared.uploads = 0; }
+    // One upload per rendered frame across ALL planets, including mip generation.
+    while (shared.pending.length && shared.uploads < 1) {
+      const day = shared.pending.findIndex(job => !job.night);
+      const job = shared.pending.splice(day < 0 ? 0 : day, 1)[0];
+      const { owner, tile: t, night, bmp } = job;
+      if (!owner.active || performance.now() - t.lastUsed > 2000) {
+        bmp.close(); if (night) t.nightState = 'idle'; else t.state = 'idle'; continue;
+      }
+      const tex = new THREE.Texture(bmp), key = t.key + (night ? ':n' : '');
+      tex.flipY = false; tex.colorSpace = THREE.NoColorSpace; tex.anisotropy = owner.aniso; tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping; tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.needsUpdate = true;
+      const admitted = shared.cache.admit(tex.uuid, {
+        bytes: textureBytes(bmp.width, bmp.height),
+        used: () => t.lastUsed,
+        pinned: () => owner._usedTextures.has(tex) && performance.now() - owner._lastUpdate < 1000,
+        dispose: () => {
+          tex.dispose(); bmp.close(); owner.cache.delete(key);
+          if (night) { t.nightTex = null; t.nightState = 'idle'; t.nightFade = 0; }
+          else {
+            if (t.mesh) { owner.group.remove(t.mesh); t.mesh.geometry.dispose(); t.mesh.material.dispose(); t.mesh = null; }
+            t.tex = null; t.state = 'idle'; t.fade = 0; t.fallback = undefined;
+          }
+        },
+      });
+      if (!admitted) {
+        // Keep decoded work bounded; never re-download a tile every frame when
+        // the budget is full of visible ancestors. Retry after they release it.
+        tex.dispose(); shared.pending.unshift(job); break;
+      }
+      owner.renderer.initTexture(tex); shared.uploads++;
+      if (night) { t.nightTex = tex; t.nightState = 'ready'; } else { t.tex = tex; t.state = 'ready'; }
+      owner.cache.set(key, t);
     }
   }
 }

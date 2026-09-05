@@ -30,6 +30,7 @@ export class BackgroundSky {
         uPixelAngle: { value: 0.001 },
         uGalInv: { value: new THREE.Matrix3().setFromMatrix4(GALAXY_MATRIX_INV) },
         uIntensity: { value: 1.0 },
+        uContrast: { value: 1.0 },
         uDensity: { value: 1.0 },
         uGalaxyFade: { value: 1.0 },
         uTiers: { value: engine.q.skyTiers },
@@ -47,7 +48,7 @@ export class BackgroundSky {
       `,
       fragmentShader: /* glsl */`
         precision highp float;
-        uniform float uTime, uPixelAngle, uIntensity, uDensity, uGalaxyFade, uTiers, uGalaxyTiers, uBand;
+        uniform float uTime, uPixelAngle, uIntensity, uContrast, uDensity, uGalaxyFade, uTiers, uGalaxyTiers, uBand;
         uniform mat3 uGalInv;
         uniform samplerCube uSmooth;
         varying vec3 vDir;
@@ -92,8 +93,8 @@ export class BackgroundSky {
             float d2 = dot(q, q);
             float s = 0.06 + 0.12 * h2.z;
             vec3 gc = mix(vec3(1.0, 0.85, 0.7), vec3(0.75, 0.8, 1.0), h.x);
-            col += gc * 0.35 * exp(-d2 / (2.0 * s * s)) * (0.5 + 0.5 * h2.y);
-            col += gc * 0.5 * exp(-d2 / (2.0 * s * s * 0.15));
+            col += gc * 0.025 * exp(-d2 / (2.0 * s * s)) * (0.5 + 0.5 * h2.y);
+            col += gc * 0.04 * exp(-d2 / (2.0 * s * s * 0.15));
           }
           return col;
         }
@@ -112,6 +113,8 @@ export class BackgroundSky {
           col += starTier(f, face, 180.0, 0.28 * dens * (0.5 + 0.9 * plane) * inside, 0.55, 1.0, 2.0);
           col += starTier(f, face, 520.0, 0.42 * dens * (0.25 + 1.4 * plane) * inside, 0.16, 0.85, 3.0);
           if (uTiers > 3.5) col += starTier(f, face, 1400.0, 0.5 * dens * (0.1 + 1.8 * plane) * inside, 0.045, 0.7, 4.0);
+          // Unresolved background stars sit below the resolved catalogue in HDR.
+          col *= 0.22;
           col += galaxyTier(f, face, 90.0, 0.045 * (1.0 - 0.85 * plane), 5.0);
           if (uGalaxyTiers > 1.5) col += galaxyTier(f, face, 260.0, 0.06 * (1.0 - 0.9 * plane), 6.0) * 0.5;
 
@@ -130,7 +133,7 @@ export class BackgroundSky {
             else col = vec3(0.45, 1.0, 0.6) * l * 0.4 + vec3(0.3, 0.9, 0.5) * plane * 0.05;                       // radio: the plane glows
           }
 
-          gl_FragColor = vec4(col * uIntensity, 1.0);
+          gl_FragColor = vec4(col * uIntensity * uContrast, 1.0);
         }
       `,
       depthTest: false, depthWrite: false, side: THREE.BackSide, fog: false,

@@ -129,6 +129,9 @@ export class UIManager {
     $('set-stars').addEventListener('input', e => { s.starDensity = Number(e.target.value); bus.emit('settings:stars', s.starDensity); });
     $('set-sens').addEventListener('input', e => { this.cameraCtl.sensitivity = Number(e.target.value); });
     $('set-autoexp').addEventListener('change', e => { s.autoExposure = e.target.checked; });
+    $('set-exposure-lock').addEventListener('change', e => { s.exposureLock = e.target.checked; });
+    $('set-exposure-meter').addEventListener('change', e => { s.exposureMeter = e.target.value; });
+    $('set-observation').addEventListener('change', e => { s.observation = e.target.checked; this.engine.taa.reset(); });
     $('set-lens').addEventListener('change', e => { s.lens = e.target.checked; });
     $('set-motion').addEventListener('change', e => { s.motionBlur = e.target.checked; });
     $('set-dof').addEventListener('change', e => { s.dof = e.target.checked; });
@@ -302,6 +305,18 @@ export class UIManager {
   /** Camera motion blur strength and depth of field (photo-mode aperture, a mild one during tours) for the temporal pass. */
   _updateCinematics() {
     const e = this.engine, cc = this.cameraCtl;
+    const meter = e.exposurePass.material.uniforms;
+    meter.uMeterTarget.value = 0;
+    if (e.settings.exposureMeter === 'target' && this.selected?.getPosition) {
+      const pos = this.selected.getPosition(this._v);
+      const distance = pos.distanceTo(cc.position);
+      pos.project(e.camera);
+      if (Number.isFinite(pos.x) && Math.abs(pos.x) < 1 && Math.abs(pos.y) < 1 && pos.z > -1 && pos.z < 1) {
+        meter.uMeterCenter.value.set(pos.x * 0.5 + 0.5, pos.y * 0.5 + 0.5);
+        meter.uMeterRadius.value = Math.max(0.025, Math.min(0.45, (this.selected.radius || 0) / Math.max(distance, 1e-9) / (2 * Math.tan(e.camera.fov * Math.PI / 360))));
+        meter.uMeterTarget.value = 1;
+      }
+    }
     const moving = !!cc.travel || cc.mode === 'SHIP' || !!cc.tourActive;
     e.motionIntensity = moving ? 1 : 0.3;
     const photo = !$('photo-panel').hidden;
@@ -515,6 +530,8 @@ export class UIManager {
       `FPS            ${e.fps.toFixed(0)}   frame ${(e.frameMs || e.dt * 1000).toFixed(1)} ms   js ${e.jsMs.toFixed(1)} ms${e.gpuMs ? '   gpu ' + e.gpuMs.toFixed(1) + ' ms' : ''}`,
       `Quality        ${e.qualityMode === 'auto' ? 'auto → ' : ''}${e.qualityName}   render scale ${(e.renderScale * 100).toFixed(0)}%  (${e.renderer.getDrawingBufferSize(this._v2 || (this._v2 = new THREE.Vector2())).x}×${e.renderer.getDrawingBufferSize(this._v2).y})   ${e.gpuName}`,
       `Draw calls     ${s.drawCalls}   tris ${fmtNum(s.triangles)}   points ${fmtNum(s.points)}`,
+      `GPU passes     ${Object.entries(e.gpuStages).map(([name, ms]) => name + ' ' + ms.toFixed(1)).join(' · ') || 'timer unavailable'} ms`,
+      `Adaptive       volume ${(e.adaptive.volume * 100).toFixed(0)}% · steps ${(e.volumeStepScale * 100).toFixed(0)}% · particles ${(e.particleScale * 100).toFixed(0)}% · bloom ${(e.adaptive.bloom * 100).toFixed(0)}% · TAA ${e.taa.enabled ? 'on' : 'off'} ${e.temporalTrial?.phase || ''}`,
       `Galaxy stars   ${fmtNum(this.universe.galaxy.starCount)}`,
       `Chunk stars    ${st ? fmtNum(st.renderedStars) + '  chunks ' + st.activeChunks + (st.pending ? '  generating ' + st.pending : '') + '  LOD ' + st.lodLevel : '—'}`,
       `Nebula/BH      ${this.universe.nebulae ? this.universe.nebulae.visibleCount : 0} vis · BH lensing ${e.blackHolePass.uniforms.uActive.value > 0 ? 'on' : 'off'}`,

@@ -20,7 +20,9 @@ export class Registry {
     o.children = o.children || [];
     o.priority = o.priority ?? 1;
     o.color = o.color ?? '#ffffff';
-    if (o.parent) { o.parent.children.push(o); }
+    // Body already links itself to its parent before registration. A second
+    // entry would consume another eclipse slot and apply its shadow twice.
+    if (o.parent && !o.parent.children.includes(o)) { o.parent.children.push(o); }
     this.objects.push(o);
     this.byId.set(o.id, o);
     return o;

@@ -22,6 +22,7 @@ export class LabelSystem {
     this.hoverObj = null;
     this.maxLabels = 70;
     this.showStars = false;
+    document.fonts?.ready.then(() => this._widths?.clear());
     bus.on('select', o => { this.selected = o; });
     bus.on('toggle', (k, v) => { if (k === 'constellations') this.showStars = v; });
   }
@@ -32,11 +33,10 @@ export class LabelSystem {
     let w = this._widths?.get(key);
     if (w != null) return w;
     if (!this._mctx) { this._mctx = document.createElement('canvas').getContext('2d'); this._widths = new Map(); }
-    const small = kind === 'moon' || kind === 'spacecraft' || kind === 'asteroid' || kind === 'dwarf' || kind === 'comet';
-    const px = small ? 10 : 11;
+    const px = 12; // matches .label, including the smaller object kinds
     this._mctx.font = `500 ${px}px Inter, system-ui, sans-serif`;
     const t = String(text).toUpperCase();
-    w = this._mctx.measureText(t).width + t.length * px * 0.08 + 12;   // letter-spacing 0.08em + dot & gap
+    w = this._mctx.measureText(t).width + t.length * px * 0.04 + 24; // tracking + dot/gap + label padding
     if (this._widths.size > 2000) this._widths.clear();
     this._widths.set(key, w);
     return w;
@@ -129,8 +129,9 @@ export class LabelSystem {
       // overlap test first (measured without layout), so rejected candidates never touch the DOM
       const name = i18n.name(c.o);
       const tw = this._measure(name, c.o.kind);
-      const x = c.sx + Math.max(c.rpx, 4) + 10, y = c.sy;
-      const rect = { x0: x, y0: y - 8, x1: x + tw, y1: y + 8 };
+      const x = Math.max(8, Math.min(c.sx + Math.max(c.rpx, 4) + 10, w - tw - 8));
+      const y = Math.max(14, Math.min(c.sy, h - 14));
+      const rect = { x0: x, y0: y - 13, x1: x + tw, y1: y + 13 };
       let overlap = false;
       for (const r of rects) { if (rect.x0 < r.x1 && rect.x1 > r.x0 && rect.y0 < r.y1 && rect.y1 > r.y0) { overlap = true; break; } }
       if (overlap && c.pri < 1000) continue;

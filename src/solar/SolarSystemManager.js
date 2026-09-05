@@ -6,6 +6,7 @@ import { Body, VISUAL } from './Body.js';
 import { StarBody } from './Sun.js';
 import { PlanetRenderer } from './Planet.js';
 import { Rings } from './Rings.js';
+import { SkyContrast } from './SkyContrast.js';
 import { Belts } from './Belts.js';
 import { buildComets } from './Comets.js';
 import { buildSpacecraft } from './Spacecraft.js';
@@ -27,6 +28,7 @@ export class SolarSystemManager {
     this.loader = new THREE.TextureLoader();
     this._v = new THREE.Vector3(); this._v2 = new THREE.Vector3();
     this.exposure = 1;
+    this.skyContrast = new SkyContrast();
     this.group = new THREE.Group();
     this.engine.scene.add(this.group);
     this.upgradeQueue = [];
@@ -178,9 +180,11 @@ export class SolarSystemManager {
     const sceneExposure = settings.exposure * (settings.autoExposure ? lerp(1, this.exposure, 0.5) : 1);
     this.engine.finalPass.uniforms.uExposure.value = sceneExposure;
     // star field exposure: dim point stars when close to bright bodies, brighter far away
-    const starExp = settings.autoExposure ? clamp(0.35 + 0.65 * smoothstep(50 * AU, 5000 * AU, dSun), 0.35, 1.0) * (1 + 0.6 * smoothstep(3000 * LY, 60000 * LY, dSun)) : 1;
+    const contrast = this.skyContrast.update(dt, this.engine.camera, camPos, this.bodies, this.sun, settings);
+    this.ctx.universe.sky.material.uniforms.uContrast.value = contrast;
+    const starExp = contrast * (settings.autoExposure ? 1 + 0.6 * smoothstep(3000 * LY, 60000 * LY, dSun) : 1);
     if (this.ctx.universe.stars) this.ctx.universe.stars.exposure = starExp;
-    this.ctx.universe.galaxy.setStarExposure(clamp(0.5 + 0.5 * smoothstep(5 * LY, 500 * LY, dSun), 0.5, 1) * 1.0);
+    this.ctx.universe.galaxy.setStarExposure(contrast * clamp(0.5 + 0.5 * smoothstep(5 * LY, 500 * LY, dSun), 0.5, 1));
     // ---- render updates
     const cam = this.engine.camera;
     const h = window.innerHeight;
@@ -197,7 +201,7 @@ export class SolarSystemManager {
         if (b.kind === 'planet' && b.children) { for (const m of b.children) if (m.kind === 'moon') shadowMoons.push(m); shadowMoons.sort((a, c) => c.radius - a.radius); }
         else if (b.kind === 'moon' && b.parent) shadowMoons.push(b.parent);   // the planet's shadow on its moon: lunar eclipses
         b.renderer.update(t, camPos, sunPos, rpx, shadowMoons, 1.0, cam);
-        if (b.rings) b.rings.update(t, camPos, sunPos, rpx, 1.0, cam);
+        if (b.rings) b.rings.update(t, camPos, sunPos, rpx, 1.0, cam, shadowMoons);
         b.group.visible = rpx > 0.4;
       } else if (b.kind === 'comet') {
         b.updateVisuals(t, camPos, 1.0, this.engine.renderer.getPixelRatio());
@@ -216,7 +220,7 @@ export class SolarSystemManager {
     // ---- sunlight for standard materials: from the Sun toward the camera's neighbourhood
     this.light.position.copy(camPos).negate().normalize().multiplyScalar(10);
     this.light.position.add(camPos); this.light.target.position.copy(camPos);
-    this.light.intensity = 3.2 * sceneExposure;
+    this.light.intensity = 3.2; // FinalPass applies exposure once, as for planets.
     // ---- lens flare: sun screen position & occlusion
     this._updateFlare(camPos, cam, fovScale);
     // ---- atmospheric entry: haze, exposure and colour as the camera descends into an atmosphere

@@ -496,7 +496,7 @@ export class StarBirth {
       for (let i = 0; i < 3; i++) cu.uSib.value[i].set(SIBLINGS[i].x, SIBLINGS[i].y, SIBLINGS[i].z, P.sib * 0.8);
       // full-resolution march: step budget by quality preset, fewer steps deep inside (the view is a uniform haze there)
       const frac = Math.min(rpx / (h * 0.5), 1);
-      const budget = { low: 18, medium: 28, high: 40, ultra: 60 }[this.engine.qualityName] || 28;
+      const budget = Math.max(12, Math.round(({ low: 18, medium: 28, high: 40, ultra: 60 }[this.engine.qualityName] || 28) * this.engine.volumeStepScale));
       const stepsMax = inside ? Math.round(budget * (0.55 + 0.45 * clamp(d / this.Sc, 0, 1))) : budget;
       cu.uSteps.value = Math.round(lerp(8, stepsMax, Math.sqrt(frac)));
       cu.uFade.value = clamp((rpx - 1.2) / 3, 0, 1) * (1 - P.cloudGone);

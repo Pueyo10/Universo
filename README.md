@@ -96,9 +96,24 @@ render scale, chunk generation).
 
 ## Graphics
 
-- **Temporal anti-aliasing** (Halton-jittered projection, depth reprojection in the
-  camera-relative frame, YCoCg neighbourhood clamp) and **eye adaptation** (histogram-free
-  log-luminance average, ACES) on the medium preset and above.
+- **Temporal anti-aliasing**: unjittered history, camera-relative reprojection, R32F
+  historical log depth for disocclusion rejection, YCoCg clamp and a colour-change
+  reactivity heuristic. Enabled on medium and above; auto-low also trials a lightweight
+  temporal path and falls back if the measured cost is too high. Explicit low stays spatial.
+- **Adaptive budgets**: sequential, asynchronous GPU timings for scene, volumes, TAA and
+  postprocessing. Scene resolution, volume resolution/steps, procedural particle density
+  and bloom resolution have separate controls with slow recovery. Volume resolution follows
+  dynamic scene resolution; the final image and TAA history retain their output size.
+- **Eye adaptation**: normalised log-luminance metering **before bloom**, faster adaptation
+  toward bright scenes, slower toward darkness, and the current exposure buffer applied in
+  the same frame. Settings offer exposure lock, selected-object metering (with a whole-view
+  fallback), and Observation mode to disable lens effects, motion blur, DOF, grain and vignette.
+- **Sky/planet contrast**: softer stellar halos, fainter procedural background, and
+  smooth sky adaptation to the illuminated planetary area in view. Exposure lock
+  preserves it; manual exposure disables the automatic contrast adjustment.
+- **Translucent rings**: angle-dependent optical-depth transmission, integrated
+  single scattering on both faces, consistent ring shadows on planets, and up to
+  four relevant moon shadows with finite-Sun penumbrae. No extra rendering pass.
 - **Physically based atmospheres**: single scattering with per-planet scale heights and
   vertical optical depths (Earth: Rayleigh 0.30 at 440 nm, aerosols 0.18, ozone Chappuis
   band), Chapman-function sun transmittance, samples concentrated at the lowest point of
@@ -107,8 +122,12 @@ render scale, chunk generation).
 - **Google-Maps-style close-ups**: 8K maps (high/ultra presets) and, closer still, real
   NASA tiles streamed on demand — Blue Marble Next Generation (500 m) and VIIRS city lights
   for Earth, LRO WAC for the Moon, Viking MDIM 2.1 for Mars, MESSENGER MDIS for Mercury.
-  A quadtree picks the level that beats the base texture, parents are hidden once their
-  visible children are ready, and a per-level depth bias keeps finer tiles on top.
+  A quadtree picks levels with hysteresis and fades new day/night detail in. Parents remain
+  until visible children have completed their transition. Spherical edge skirts cover LOD
+  gaps; a narrow shared-base blend softens texture borders. Ocean colour is matched at low
+  frequencies using the water mask. Streamed RGBA8 textures share a 64 MiB GPU budget
+  including mipmaps; uploads are limited to one per frame across all planets. Visible fallback
+  textures stay resident. This budget does not include local 8K maps or render targets.
 - Cloud decks fade out below ~0.25 radii so the surface can be explored; the ocean glint
   is damped from low orbit.
 - **Temporal upscaling**: when the dynamic resolution drops, the scene is rendered into a
@@ -117,14 +136,10 @@ render scale, chunk generation).
 - **Cinematic camera**: per-pixel camera motion blur (reprojection vector, strong during travel,
   tours and flight, subtle otherwise) and a depth of field with temporally integrated bokeh
   (photo-mode aperture slider; a mild one during tours). Both toggles live in Settings.
-- **Temporal upscaling**: when the dynamic resolution drops, the scene is rendered into a
-  fraction of the frame and the TAA history reconstructs the full-resolution image (TAAU), so
-  a 50 % render scale keeps smooth edges instead of the old bilinear stretch.
-- **Cinematic camera**: per-pixel camera motion blur (reprojection vector, strong during travel,
-  tours and flight, subtle otherwise) and a depth of field with temporally integrated bokeh
-  (photo-mode aperture slider; a mild one during tours). Both toggles live in Settings.
-
 ## Controls
+
+Rendering checks, performance acceptance route and current limitations:
+[rendering validation](docs/rendering-validation.md).
 
 | Action | Input |
 | --- | --- |

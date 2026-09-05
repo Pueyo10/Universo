@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { LOGDEPTH_PARS_VERT, LOGDEPTH_VERT, LOGDEPTH_PARS_FRAG, LOGDEPTH_FRAG, SIMPLEX3D, HASH } from '../shaders/chunks.js';
 import { Rng } from '../core/Random.js';
+import { RING_OPTICS, RING_ECLIPSE } from '../shaders/ringOptics.js';
 
 // Planetary rings: a radial density profile with real gaps (Cassini, Encke,
 // Keeler…), lit and unlit sides, forward scattering when backlit, the planet's
@@ -22,6 +23,10 @@ const ringFrag = /* glsl */`
   varying vec3 vPos; varying vec2 vUv;
   uniform sampler2D uTex; uniform vec3 uSunDir, uCamLocal;
   uniform float uInner, uOuter, uTime, uExposure, uDetail, uFaint, uPlanetFlat;
+  uniform vec4 uMoons[4]; uniform int uMoonCount;
+  uniform float uSunAngular;
+  ${RING_OPTICS}
+  ${RING_ECLIPSE}
   ${HASH}
   ${SIMPLEX3D}
   ${LOGDEPTH_PARS_FRAG}
@@ -41,27 +46,34 @@ const ringFrag = /* glsl */`
     }
     if (a < 0.003) discard;
     vec3 L = normalize(uSunDir);
-    vec3 V = normalize(uCamLocal - vPos);
+    vec3 view = uCamLocal - vPos;
+    view.y *= uPlanetFlat; // undo the body's flattening: angles use Euclidean space
+    vec3 V = normalize(view);
     float nl = L.y;   // ring normal = +Y
     float nv = V.y;
     bool sameSide = (nl * nv) > 0.0;
-    // lit side: direct reflection; unlit side: transmitted light through thin parts
-    float lit = sameSide ? abs(nl) : abs(nl) * (1.0 - a) * 0.75;
+    float tau = ringOpticalDepth(a * uFaint);
+    float alpha = 1.0 - ringTransmission(tau, nv);
+    float scatter = ringScatter(tau, abs(nl), abs(nv), sameSide);
     // planet shadow: does the sun ray from this point hit the (slightly flattened) planet?
     vec3 P = vPos; P.y /= uPlanetFlat;
     vec3 Ls = L; Ls.y /= uPlanetFlat; Ls = normalize(Ls);
-    float b = dot(P, Ls); float c = dot(P, P) - 1.0; float h = b * b - c;
+    float b = dot(P, Ls);
     float shadow = 1.0;
-    if (h > 0.0 && (-b - sqrt(h)) > 0.0) shadow = 0.04;
-    // soften the shadow edge using distance of closest approach
+    // Continuous penumbra, including pixel footprint at reduced resolution.
     float dca = length(P - Ls * max(-b, 0.0));
-    if (b < 0.0) shadow = mix(shadow, 1.0, smoothstep(1.0, 1.03, dca));
-    // forward scattering (backlit) glow for thin/dusty parts
-    float fwd = pow(max(dot(-V, L), 0.0), 12.0) * (1.0 - a) * 0.8;
-    vec3 col = s.rgb * (0.12 + 1.15 * lit) * shadow + vec3(0.9, 0.85, 0.75) * fwd * shadow;
+    float pen = max(uSunAngular * max(-b, 0.0), max(fwidth(dca), 1e-5));
+    if (b < 0.0) shadow = smoothstep(1.0 - pen, 1.0 + pen, dca);
+    for (int i = 0; i < 4; i++) {
+      if (i >= uMoonCount) break;
+      shadow *= ringMoonVisibility(vPos, L, uMoons[i], uSunAngular);
+    }
+    // Bounded Henyey-Greenstein forward lobe (g=0.55), plus diffuse ice.
+    // Slab extinction makes dense bands dark from the unlit side.
+    float phase = 0.75 + 0.25 * 0.6975 / pow(max(1.3025 - 1.1 * dot(-V, L), 0.2025), 1.5);
+    vec3 col = s.rgb * (0.018 * alpha + 1.5 * phase * scatter * shadow);
     col *= uExposure;
-    float alpha = clamp(a * uFaint, 0.0, 1.0);
-    gl_FragColor = vec4(col * alpha, alpha);
+    gl_FragColor = vec4(col, alpha); // slab integral is already premultiplied
   }
 `;
 
@@ -114,6 +126,13 @@ export class Rings {
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
     });
     this.mesh = new THREE.Mesh(geo, this.material);
+    Object.assign(this.material.uniforms, {
+      uMoons: { value: Array.from({ length: 4 }, () => new THREE.Vector4()) },
+      uMoonCount: { value: 0 }, uSunAngular: { value: 0.0005 },
+    });
+    this._moonLocal = new THREE.Vector3();
+    this._moonScores = new Float64Array(4);
+    this.shadowMoonIds = [];
     this.mesh.renderOrder = 63;
     // rings lie in the planet's equatorial plane = local XZ (pole = local Y)
     body.group.add(this.mesh);
@@ -187,20 +206,61 @@ export class Rings {
     geo.instanceCount = i;
   }
 
-  update(t, camPos, sunPos, rpx, exposure, camera) {
+  update(t, camPos, sunPos, rpx, exposure, camera, moons = []) {
     const b = this.body;
     const u = this.material.uniforms;
-    const sunDirWorld = this._v.copy(sunPos).sub(b.position).normalize();
+    const sunDirWorld = this._v.copy(sunPos).sub(b.position);
+    u.uSunAngular.value = 695.7 / Math.max(sunDirWorld.length(), 695.7);
+    sunDirWorld.normalize();
     b.worldDirToLocal(sunDirWorld, u.uSunDir.value);
     b.worldToLocal(camPos, u.uCamLocal.value);
     u.uTime.value = t; u.uExposure.value = exposure;
     u.uDetail.value = THREE.MathUtils.clamp((rpx - 300) / 900, 0, 1);
     this.mesh.visible = rpx > 1.5;
+    this._updateMoons(moons, rpx);
     this._updateRocks(u.uCamLocal.value, b.radius);
     if (this.rocks.visible) {
       const ru = this.rockMat.uniforms;
       ru.uTime.value = t; ru.uExposure.value = exposure;
       ru.uSunDirView.value.copy(u.uSunDir.value); // rock normals are in ring-local space
     }
+  }
+
+  _updateMoons(moons, rpx) {
+    const u = this.material.uniforms, L = u.uSunDir.value;
+    const flat = u.uPlanetFlat.value, solar = u.uSunAngular.value;
+    let count = 0;
+    this.shadowMoonIds.length = 0;
+    if (!this.mesh.visible) { u.uMoonCount.value = 0; return; }
+    for (const moon of moons) {
+      const r = moon.radius / this.body.radius;
+      if (r * rpx < 0.35) continue;
+      const m = this.body.worldToLocal(moon.position, this._moonLocal);
+      m.y *= flat;
+      // Conservative shadow-cone / ring bounding sphere rejection.
+      const along = m.dot(L), pen = solar * Math.max(along + this.outer, 0);
+      if (along < -this.outer - r || m.lengthSq() - along * along > (this.outer + r + pen) ** 2) continue;
+      // The shadow footprint in the ring plane is an ellipse. Its major axis
+      // gives conservative radial bounds; keep the sphere test near equinox.
+      if (Math.abs(L.y) > 0.002) {
+        const t = m.y / L.y, extent = (r + solar * Math.max(t, 0)) / Math.abs(L.y);
+        if (t < -extent) continue;
+        const centerR = Math.hypot(m.x - L.x * t, m.z - L.z * t);
+        if (centerR - extent > this.outer || centerR + extent < this.inner) continue;
+      }
+      const score = r * r / (1 + pen / r);
+      let at = 0;
+      while (at < count && this._moonScores[at] >= score) at++;
+      if (at >= 4) continue;
+      for (let j = Math.min(count, 3); j > at; j--) {
+        u.uMoons.value[j].copy(u.uMoons.value[j - 1]);
+        this._moonScores[j] = this._moonScores[j - 1];
+        this.shadowMoonIds[j] = this.shadowMoonIds[j - 1];
+      }
+      u.uMoons.value[at].set(m.x, m.y, m.z, r);
+      this._moonScores[at] = score; this.shadowMoonIds[at] = moon.id;
+      count = Math.min(count + 1, 4);
+    }
+    u.uMoonCount.value = count;
   }
 }

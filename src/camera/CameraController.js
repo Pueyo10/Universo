@@ -432,6 +432,7 @@ export class CameraController {
 
   /** Instantly place the camera. */
   setPose(pos, lookAt) {
+    bus.emit('camera:cut');
     this.position.copy(pos);
     if (lookAt) this.quaternion.setFromRotationMatrix(this._m.lookAt(pos, lookAt, this.up));
     this._syncYawPitchFromQuat();

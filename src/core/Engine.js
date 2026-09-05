@@ -7,6 +7,8 @@ import { BlackHolePass } from '../postfx/BlackHolePass.js';
 import { TAAPass } from '../postfx/TAAPass.js';
 import { ExposurePass } from '../postfx/ExposurePass.js';
 import { bus } from './EventBus.js';
+import { GpuProfiler } from './GpuProfiler.js';
+import { AdaptiveQuality } from './AdaptiveQuality.js';
 
 // Quality presets. `pixelRatio` is the ceiling: dynamic resolution scaling may
 // lower the effective render scale down to `minScale` to hold 60 fps.
@@ -36,7 +38,7 @@ export function detectQuality(gl) {
 export class Engine {
   constructor(canvas, qualityName = 'auto') {
     this.canvas = canvas;
-    this.settings = { bloom: 0.9, exposure: 1.0, autoExposure: true, lens: true, motionBlur: true, dof: true, fov: 55, starDensity: 1.0 };
+    this.settings = { bloom: 0.9, exposure: 1.0, autoExposure: true, exposureLock: false, exposureMeter: 'frame', observation: false, lens: true, motionBlur: true, dof: true, fov: 55, starDensity: 1.0 };
     this.motionIntensity = 0.3;   // set by the UI: 0.3 baseline (camera turns), 1 during travel / tours / flight
     this.dofAperture = 0; this.dofFocus = 1;   // set by the UI (photo mode aperture, mild during tours); focus in world units
 
@@ -56,6 +58,10 @@ export class Engine {
     this.q = QUALITY[this.qualityName];
     this.renderScale = 1;                                 // dynamic resolution multiplier on q.pixelRatio
     this.autoScale = !new URLSearchParams(location.search).has('nodrs');
+    this.adaptive = new AdaptiveQuality();
+    this.volumeStepScale = 1;
+    this.particleScale = 1;
+    this._noTaa = new URLSearchParams(location.search).has('notaa');
 
     renderer.setPixelRatio(this.q.pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -109,6 +115,8 @@ export class Engine {
       samples: this.q.samples, depthBuffer: true, stencilBuffer: false,
     });
     this.composer = new EffectComposer(renderer, rt);
+    // All target sizes below are physical pixels. Do not apply device DPR twice.
+    this.composer.setPixelRatio(1);
     // the scene colour buffers carry a float depth texture: the TAA pass reprojects against it
     for (const t of [this.composer.renderTarget1, this.composer.renderTarget2]) { const d = new THREE.DepthTexture(size.x, size.y); d.type = THREE.FloatType; t.depthTexture = d; }
     this.renderPass = new RenderPass(this.scene, this.camera);
@@ -119,6 +127,9 @@ export class Engine {
     this.blackHolePass = new BlackHolePass(this.camera);
     this.blackHolePass.enabled = false;          // enabled by BlackHole only when lensing is on screen
     this.composer.addPass(this.blackHolePass);
+    // Meter the scene before optical bloom, so the bloom slider cannot pump exposure.
+    this.exposurePass = new ExposurePass();
+    this.composer.addPass(this.exposurePass);
     this.bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x * this.q.bloomScale, size.y * this.q.bloomScale), 0.9, 0.55, 1.0);
     this.bloomPass.threshold = 1.1; this.bloomPass.strength = 0.9; this.bloomPass.radius = 0.45;
     this.bloomPass.materialHighPassFilter.uniforms.smoothWidth.value = 0.7;   // soft knee: no hard cut between glowing and not
@@ -129,15 +140,21 @@ export class Engine {
     this.bloomPass.materialHighPassFilter.needsUpdate = true;
     this.composer.addPass(this.bloomPass);
     // image-based auto exposure (adapted mean log-luminance), read by the final pass
-    this.exposurePass = new ExposurePass();
-    this.composer.addPass(this.exposurePass);
     this.finalPass = new FinalPass();
+    this.finalPass.exposurePass = this.exposurePass;
     this.finalPass.uniforms.tLum.value = this.exposurePass.texture;
     this.composer.addPass(this.finalPass);
 
     // ------ GPU timing (for dynamic resolution) ------
-    this._timerExt = this.gl.getExtension('EXT_disjoint_timer_query_webgl2');
-    this._queries = [];
+    this.profiler = new GpuProfiler(this.gl);
+    this._timerExt = this.profiler.ext;
+    this.profiler.wrap(this.renderPass, 'scene');
+    this.profiler.wrap(this.taa, 'taa');
+    this.profiler.wrap(this.blackHolePass, 'post');
+    this.profiler.wrap(this.exposurePass, 'post');
+    this.profiler.wrap(this.bloomPass, 'post');
+    this.profiler.wrap(this.finalPass, 'post');
+    this.gpuStages = {};
     this.gpuMs = 0;
 
     // ------ loop state ------
@@ -149,11 +166,15 @@ export class Engine {
     this.fps = 60; this._fpsAcc = 0; this._fpsN = 0;
     this.jsMs = 0;
     this.stats = { drawCalls: 0, triangles: 0, points: 0, programs: 0, geometries: 0, textures: 0 };
-    this._perf = { acc: 0, n: 0, js: 0, gpu: 0, gpuN: 0, lastChange: 0, probeAt: -1, backoffUntil: 0 };
+    this._perf = { acc: 0, n: 0, js: 0, gpu: 0, gpuN: 0 };
     this.running = false;
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
     this.resize();
+    this._startTemporalTrial();
+    for (const event of ['camera:cut', 'time:set', 'starbirth:seek', 'observatory:changed']) bus.on(event, () => this.taa.reset());
+    bus.on('toggle', key => { if (key === 'realScale') this.taa.reset(); });
+    this._lastFov = this.camera.fov;
   }
 
   setQuality(name) {
@@ -161,10 +182,12 @@ export class Engine {
     else if (QUALITY[name]) this.qualityMode = name;
     else return;
     this.qualityName = name; this.q = QUALITY[name];
-    this.taa.enabled = !!this.q.taa;
+    this.taa.enabled = !!this.q.taa && !this._noTaa;
+    this.adaptive.reset(); this.volumeStepScale = 1; this.particleScale = 1;
     this.renderScale = 1;
-    this._perf.lastChange = this.time; this._perf.backoffUntil = this.time + 3;
-    this._applyScale();
+    this._perf = { acc: 0, n: 0, js: 0, gpu: 0, gpuN: 0 };
+    this.renderer.setPixelRatio(this.q.pixelRatio); this.resize(); this.taa.reset();
+    this._startTemporalTrial();
     bus.emit('quality', name);
   }
 
@@ -173,6 +196,21 @@ export class Engine {
     // image (TAAU): the drawing buffer keeps its size. Without TAA fall back to a smaller drawing buffer.
     const pr = this.taa && this.taa.enabled ? this.q.pixelRatio : this.q.pixelRatio * this.renderScale;
     if (Math.abs(this.renderer.getPixelRatio() - pr) > 1e-6) { this.renderer.setPixelRatio(pr); this.resize(); }
+    else this._resizeEffects();
+  }
+
+  _startTemporalTrial() {
+    // Only auto-low tries the light temporal path. Explicit low stays unchanged.
+    const eligible = this.qualityMode === 'auto' && this.qualityName === 'low' && !this._noTaa && this.autoScale && !/swiftshader|llvmpipe|software|basic render/i.test(this.gpuName);
+    this.temporalTrial = eligible ? { phase: 'baseline', until: this.time + 4, samples: [], baseline: 0, scale: 1 } : null;
+  }
+
+  _resizeEffects() {
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    const rs = this.taa.enabled ? this.renderScale : 1;
+    const volume = this.q.nebulaScale * rs * this.adaptive.volume;
+    for (const rt of [this.nebulaRT, this.volRT]) rt.setSize(Math.max(8, Math.round(size.x * volume)), Math.max(8, Math.round(size.y * volume)));
+    this.bloomPass.setSize(Math.max(8, Math.round(size.x * this.q.bloomScale * this.adaptive.bloom)), Math.max(8, Math.round(size.y * this.q.bloomScale * this.adaptive.bloom)));
   }
 
   resize() {
@@ -186,8 +224,7 @@ export class Engine {
     this.bloomPass.setSize(Math.max(8, Math.round(size.x * this.q.bloomScale)), Math.max(8, Math.round(size.y * this.q.bloomScale)));
     this.finalPass.setSize(size.x, size.y);
     this.blackHolePass.setSize(size.x, size.y);
-    this.nebulaRT.setSize(Math.max(8, Math.round(size.x * this.q.nebulaScale)), Math.max(8, Math.round(size.y * this.q.nebulaScale)));
-    this.volRT.setSize(Math.max(8, Math.round(size.x * this.q.nebulaScale)), Math.max(8, Math.round(size.y * this.q.nebulaScale)));
+    this._resizeEffects();
     bus.emit('resize', w, h);
   }
 
@@ -257,6 +294,7 @@ export class Engine {
     const rawDt = this.clock.getDelta();
     const dt = Math.min(rawDt, 0.1);
     this.dt = dt; this.time += dt; this.frame++;
+    this.particleScale += (this.adaptive.particles - this.particleScale) * Math.min(1, dt * 2);
     this._fpsAcc += dt; this._fpsN++;
     if (this._fpsAcc >= 0.5) { this.fps = this._fpsN / this._fpsAcc; this._fpsAcc = 0; this._fpsN = 0; }
     for (const s of this.systems) { if (s.enabled !== false) s.update(dt, this.time); }
@@ -269,6 +307,8 @@ export class Engine {
 
   render() {
     this.camera.fov = this.settings.fov * (this.fovMultiplier || 1);
+    if (Math.abs(this.camera.fov - this._lastFov) > 5) this.taa.reset();
+    this._lastFov = this.camera.fov;
     this.camera.updateProjectionMatrix();
     // sub-pixel jitter for the temporal AA (the pass reprojects the previous frame against this camera)
     const dbs = this.renderer.getDrawingBufferSize(this._dbs || (this._dbs = new THREE.Vector2()));
@@ -278,19 +318,27 @@ export class Engine {
     this.taa.setScale(vw / dbs.x, vh / dbs.y);
     this.taa.jitter(vw, vh); this.taa.camPos.copy(this.camera.position);
     this.taa.pixelRatio = this.renderer.getPixelRatio();
-    this.taa.motionBlur = this.settings.motionBlur && this.q.motion ? this.motionIntensity : 0;
-    this.taa.dof.aperture = this.settings.dof && this.q.dof ? this.dofAperture : 0;
+    this.taa.motionBlur = this.settings.motionBlur && this.q.motion && !this.settings.observation ? this.motionIntensity : 0;
+    this.taa.dof.aperture = this.settings.dof && this.q.dof && !this.settings.observation ? this.dofAperture : 0;
     this.taa.dof.focus = this.dofFocus;
     this.exposurePass.dt = this.dt;
+    this.exposurePass.locked = this.settings.exposureLock;
+    this.exposurePass.material.uniforms.uAspect.value = this.camera.aspect;
     this.finalPass.uniforms.tLum.value = this.exposurePass.texture;
     this.finalPass.uniforms.uAutoExp.value = this.settings.autoExposure ? 1 : 0;
     this.bloomPass.strength = this.settings.bloom + (this.bloomBoost || 0);
-    this.finalPass.uniforms.uLens.value = this.settings.lens ? 1 : 0;
+    this.finalPass.uniforms.uLens.value = this.settings.lens && !this.settings.observation ? 1 : 0;
+    this.finalPass.observation = this.settings.observation;
     this.finalPass.uniforms.uTime.value = this.time;
     const info = this.renderer.info;
     info.autoReset = false;
     info.reset();
-    const q = this._beginGpuQuery();
+    for (const ms of this.profiler.poll()) {
+      this.gpuMs = this.gpuMs ? this.gpuMs * 0.8 + ms * 0.2 : ms;
+      this._perf.gpu += ms; this._perf.gpuN++;
+    }
+    this.gpuStages = this.profiler.stages;
+    this.profiler.beginFrame(); this.profiler.begin('volume');
     // volumetric layer at reduced resolution
     if (this.nebulaActive) {
       const r = this.renderer;
@@ -312,36 +360,11 @@ export class Engine {
       r.setRenderTarget(null);
     }
     this.volComposite.visible = this.volActive;
+    this.profiler.end();
     this.composer.render(this.dt);
-    this._endGpuQuery(q);
+    this.profiler.endFrame();
     this.stats.drawCalls = info.render.calls; this.stats.triangles = info.render.triangles; this.stats.points = info.render.points;
     this.stats.programs = info.programs?.length || 0; this.stats.geometries = info.memory.geometries; this.stats.textures = info.memory.textures;
-  }
-
-  // ---------------------------------------------------------------- GPU timer queries
-  _beginGpuQuery() {
-    const ext = this._timerExt; if (!ext) return null;
-    const gl = this.gl;
-    if (this._queries.length >= 4) return null;           // don't let them pile up
-    const q = gl.createQuery();
-    gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
-    return q;
-  }
-  _endGpuQuery(q) {
-    const ext = this._timerExt; if (!ext) return;
-    const gl = this.gl;
-    if (q) { gl.endQuery(ext.TIME_ELAPSED_EXT); this._queries.push(q); }
-    // harvest finished queries (oldest first)
-    while (this._queries.length) {
-      const h = this._queries[0];
-      const disjoint = gl.getParameter(ext.GPU_DISJOINT_EXT);
-      if (disjoint) { for (const x of this._queries) gl.deleteQuery(x); this._queries.length = 0; break; }
-      if (!gl.getQueryParameter(h, gl.QUERY_RESULT_AVAILABLE)) break;
-      const ns = gl.getQueryParameter(h, gl.QUERY_RESULT);
-      gl.deleteQuery(h); this._queries.shift();
-      const ms = ns / 1e6;
-      if (ms > 0 && ms < 1000) { this.gpuMs = this.gpuMs ? this.gpuMs * 0.8 + ms * 0.2 : ms; this._perf.gpu += ms; this._perf.gpuN++; }
-    }
   }
 
   // ---------------------------------------------------------------- dynamic resolution
@@ -355,26 +378,37 @@ export class Engine {
     p.acc = 0; p.n = 0; p.js = 0; p.gpu = 0; p.gpuN = 0;
     this.frameMs = wall;
     if (!this.autoScale || this.time < 2) return;
-    const t = this.time, minS = this.q.minScale;
-    let s = this.renderScale;
-    const cpuBound = js > 11;                  // simulation alone eats the budget: lowering resolution cannot help
-    if (gpu != null) {
-      // measured GPU time: steer toward a ~13 ms GPU budget (leaves headroom for compositor + CPU)
-      if (gpu > 15.5) s *= Math.max(0.7, Math.min(0.95, Math.sqrt(13 / gpu)));
-      else if (gpu < 9.5 && s < 1 && t - p.lastChange > 2 && t > p.backoffUntil) s = Math.min(1, s * Math.min(1.15, Math.sqrt(13 / Math.max(gpu, 1))));
-    } else {
-      // wall-clock heuristic (vsync makes headroom invisible, so probe upward carefully)
-      if (wall > 17.8 && !cpuBound) {
-        s *= 0.85;
-        if (p.probeAt >= 0 && t - p.probeAt < 3) { p.backoffUntil = t + 25; }   // the probe failed: hold for a while
-        p.probeAt = -1;
-      } else if (wall < 17.2 && s < 1 && t - p.lastChange > 4 && t > p.backoffUntil) {
-        s = Math.min(1, s * 1.1); p.probeAt = t;
+    const trial = this.temporalTrial;
+    if (trial && !['accepted', 'fallback'].includes(trial.phase)) {
+      // Compare at the same scene scale; discard the first timing window after switching.
+      if (trial.phase === 'baseline') {
+        trial.samples.push(gpu ?? wall);
+        if (this.time >= trial.until && trial.samples.length >= 3) {
+          trial.baseline = trial.samples.reduce((a, b) => a + b, 0) / trial.samples.length;
+          trial.scale = this.renderScale; trial.samples = []; trial.phase = 'temporal'; trial.until = this.time + 4;
+          this.taa.enabled = true; this.taa.reset(); this._applyScale();
+        }
+        return;
+      } else {
+        if (this.time > trial.until - 3) trial.samples.push(gpu ?? wall);
+        if (this.time >= trial.until && trial.samples.length >= 3) {
+          const cost = trial.samples.reduce((a, b) => a + b, 0) / trial.samples.length;
+          const accept = cost <= (gpu == null ? 17.2 : 14.5) && cost <= trial.baseline + 2.5;
+          trial.phase = accept ? 'accepted' : 'fallback';
+          if (!accept) { this.taa.enabled = false; this.taa.reset(); this._applyScale(); }
+          this.adaptive.recoverAfter = this.time + 4;
+        }
+        return;
       }
     }
-    s = Math.max(minS, Math.min(1, s));
-    if (Math.abs(s - this.renderScale) > 0.01) {
-      this.renderScale = s; p.lastChange = t;
+    // A scene visited later can make the temporal path unaffordable.
+    if (trial?.phase === 'accepted' && gpu != null && gpu > 16 && (this.gpuStages.taa || 0) > 4) {
+      trial.phase = 'fallback'; this.taa.enabled = false; this.taa.reset(); this._applyScale();
+    }
+    this.adaptive.scene = this.renderScale;
+    if (this.adaptive.update({ time: this.time, gpu, wall, cpu: js, stages: this.gpuStages, minScene: this.q.minScale, volumeActive: this.nebulaActive || this.volActive })) {
+      this.renderScale = this.adaptive.scene;
+      this.volumeStepScale = this.adaptive.steps;
       this._applyScale();
     }
   }

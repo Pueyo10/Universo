@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TileGlobe, TILE_SOURCES, HIRES, loadHiRes } from './TileGlobe.js';
+import { RING_OPTICS } from '../shaders/ringOptics.js';
 import { LOGDEPTH_PARS_VERT, LOGDEPTH_VERT, LOGDEPTH_PARS_FRAG, LOGDEPTH_FRAG, SIMPLEX3D, HASH } from '../shaders/chunks.js';
 
 // Planet rendering: layered surface / clouds / atmosphere with physically
@@ -30,13 +31,19 @@ const surfFrag = /* glsl */`
   uniform vec3 uAtmoColor; uniform float uAtmoStrength;
   uniform float uTime, uCloudOffset, uSunAngular, uGas, uBands, uSpotStrength;
   uniform vec2 uSpot;
-  uniform float uRingInner, uRingOuter; uniform vec3 uRingNormal;
+  uniform float uRingInner, uRingOuter, uRingFaint; uniform vec3 uRingNormal;
   uniform vec4 uMoons[4]; uniform int uMoonCount;
   uniform float uHexagon, uDarkSpot, uPolarBright, uExposure, uNoTerminator;
   uniform vec3 uTint;
   uniform vec4 uTileUV, uNightTileUV;   // (u0, v0, 1/du, 1/dv): streamed tiles sample their own texture with a sub-rectangle of the global uv
+  #ifdef TILE_SURFACE
+  uniform sampler2D uParentMap, uBaseMap, uBaseNight, uParentNight;
+  uniform vec4 uParentUV, uParentNightUV;
+  uniform float uTileFade, uNightFade, uTileSize;
+  #endif
   ${HASH}
   ${SIMPLEX3D}
+  ${RING_OPTICS}
   ${LOGDEPTH_PARS_FRAG}
 
   vec3 srgb2lin(vec3 c) { return pow(c, vec3(2.2)); }
@@ -86,6 +93,28 @@ const surfFrag = /* glsl */`
     // soft terminator (atmospheric twilight widens it)
     float day = uNoTerminator > 0.5 ? 1.0 : smoothstep(-0.03 - uAtmoStrength * 0.08, 0.10, ndlRaw);
     vec3 albedo = srgb2lin(texture2D(uMap, (uv - uTileUV.xy) * uTileUV.zw).rgb) * uTint;
+    #ifdef TILE_SURFACE
+    vec2 tileUv = (uv - uTileUV.xy) * uTileUV.zw;
+    vec2 parentUv = (uv - uParentUV.xy) * uParentUV.zw;
+    vec3 baseAlbedo = srgb2lin(texture2D(uBaseMap, uv).rgb) * uTint;
+    vec3 parentAlbedo = srgb2lin(texture2D(uParentMap, parentUv).rgb) * uTint;
+    // Match only the low-frequency ocean colour, preserving NASA's fine detail.
+    // The existing specular mask identifies water; land remains untouched.
+    if (uHasSpec > 0.5) {
+      float water = smoothstep(0.4, 0.9, texture2D(uSpecMap, uv).r);
+      vec3 lowTile = srgb2lin(textureLod(uMap, tileUv, 4.0).rgb) * uTint;
+      vec3 lowParent = srgb2lin(textureLod(uParentMap, parentUv, 4.0).rgb) * uTint;
+      albedo = max(vec3(0.0), albedo + (baseAlbedo - lowTile) * water * 0.85);
+      if (uParentUV.z > 1.0) parentAlbedo = max(vec3(0.0), parentAlbedo + (baseAlbedo - lowParent) * water * 0.85);
+    }
+    albedo = mix(parentAlbedo, albedo, smoothstep(0.0, 1.0, uTileFade));
+    // Resolve the final pixel at a tile boundary against the shared base map.
+    // This also makes mixed LOD edges agree without fetching extra neighbour tiles.
+    vec2 edge = min(tileUv, 1.0 - tileUv);
+    vec2 edgeWidth = max(fwidth(tileUv), vec2(1.0 / uTileSize));
+    float interior = smoothstep(0.0, 1.0, min(edge.x / edgeWidth.x, edge.y / edgeWidth.y));
+    albedo = mix(baseAlbedo, albedo, interior);
+    #endif
 
     // ---- shadows
     float shadow = 1.0;
@@ -112,7 +141,7 @@ const surfFrag = /* glsl */`
           float rr = length(hit);
           if (rr > uRingInner && rr < uRingOuter) {
             float ra = texture2D(uRingTex, vec2((rr - uRingInner) / (uRingOuter - uRingInner), 0.5)).a;
-            shadow *= 1.0 - ra * 0.92;
+            shadow *= ringTransmission(ringOpticalDepth(ra * uRingFaint), dn);
           }
         }
       }
@@ -143,6 +172,11 @@ const surfFrag = /* glsl */`
     // night lights
     if (uHasNight > 0.5) {
       vec3 night = srgb2lin(texture2D(uNightMap, (uv - uNightTileUV.xy) * uNightTileUV.zw).rgb);
+      #ifdef TILE_SURFACE
+      vec3 parentNight = srgb2lin(texture2D(uParentNight, (uv - uParentNightUV.xy) * uParentNightUV.zw).rgb);
+      night = mix(parentNight, night, smoothstep(0.0, 1.0, uNightFade));
+      night = mix(srgb2lin(texture2D(uBaseNight, uv).rgb), night, interior);
+      #endif
       float nightMask = 1.0 - smoothstep(-0.12, 0.05, ndlRaw);
       col += night * vec3(1.0, 0.85, 0.6) * nightMask * 1.4;
     }
@@ -364,6 +398,7 @@ export class PlanetRenderer {
       uTime: { value: 0 }, uCloudOffset: { value: 0 }, uSunAngular: { value: 0.0046 }, uGas: { value: def.type === 'gas' || def.type === 'ice' ? 1 : 0 }, uBands: { value: def.id === 'jupiter' ? 1.0 : def.id === 'saturn' ? 0.6 : 0.3 }, uSpotStrength: { value: def.id === 'jupiter' ? 1.0 : 0 },
       uSpot: { value: new THREE.Vector2(0.64, 0.62) },
       uRingInner: { value: def.rings?.inner || 0 }, uRingOuter: { value: def.rings?.outer || 0 }, uRingNormal: { value: new THREE.Vector3(0, 1, 0) },
+      uRingFaint: { value: def.rings?.faint ? (def.rings.veryFaint ? 0.35 : 0.6) : 1 },
       uMoons: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] }, uMoonCount: { value: 0 },
       uHexagon: { value: def.id === 'saturn' ? 1 : 0 }, uDarkSpot: { value: def.id === 'neptune' ? 1 : 0 }, uPolarBright: { value: def.id === 'uranus' ? 1 : 0 }, uExposure: { value: 1 }, uNoTerminator: { value: 0 },
       uTint: { value: new THREE.Vector3(1, 1, 1) },
@@ -478,7 +513,7 @@ export class PlanetRenderer {
     const eng = b.manager && b.manager.engine;
     if (eng) {
       if (this.tiles === undefined) this.tiles = (TILE_SOURCES[b.def.id] && eng.q.tiles > 0) ? new TileGlobe(this, TILE_SOURCES[b.def.id], eng.renderer, eng.q.tiles, eng.q.hiRes ? TILE_SOURCES[b.def.id].minHi : TILE_SOURCES[b.def.id].minLo) : null;
-      if (this.tiles && camera) { const focal = window.innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)); this.tiles.update(camera, u.uCamLocal.value, rpx, focal, eng.dt || 0.016); }
+      if (this.tiles && camera) { const focal = window.innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)); this.tiles.maxZ = Math.min(this.tiles.src.max, eng.q.tiles); this.tiles.update(camera, u.uCamLocal.value, rpx, focal, eng.dt || 0.016, eng.frame); }
       this._hiRes(rpx, eng);
     }
     // geometry LOD

@@ -228,6 +228,7 @@ export class Belts {
     const pr = this.engine.renderer.getPixelRatio();
     const sizeMul = 1 + scaleT * (VISUAL.smallRadius - 1) * 0.5;
     for (const b of [this.asteroids, this.kuiper, this.scattered]) {
+      b.geometry.setDrawRange(0, Math.round(b.geometry.attributes.position.count * this.engine.particleScale));
       const u = b.material.uniforms;
       u.uDays.value = days; u.uScaleT.value = scaleT; u.uPixelRatio.value = pr; u.uSizeMul.value = sizeMul; u.uCamPos.value.copy(camPos);
       u.uFade.value = exposure * 0.9;

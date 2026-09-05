@@ -167,4 +167,12 @@ export class FinalPass extends ShaderPass {
     this.uniforms.uResolution.value.set(w, h);
     this.uniforms.uAspect.value = w / h;
   }
+  render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
+    // Exposure ping-pongs earlier in this SAME composer frame.
+    if (this.exposurePass) this.uniforms.tLum.value = this.exposurePass.texture;
+    const grain = this.uniforms.uGrain.value, vignette = this.uniforms.uVignette.value;
+    if (this.observation) { this.uniforms.uGrain.value = 0; this.uniforms.uVignette.value = 0; }
+    try { super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive); }
+    finally { this.uniforms.uGrain.value = grain; this.uniforms.uVignette.value = vignette; }
+  }
 }

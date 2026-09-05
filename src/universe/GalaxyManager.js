@@ -49,7 +49,7 @@ const starFrag = /* glsl */`
     vec2 c = gl_PointCoord - 0.5;
     float d2 = dot(c, c) * 4.0;
     float core = exp(-d2 * 5.0);
-    float halo = exp(-d2 * 1.6) * 0.35;
+    float halo = exp(-d2 * 1.6) * 0.12;
     float a = (core + halo) * vAlpha;
     if (a < 0.003) discard;
     gl_FragColor = vec4(vColor * a * 1.15 + vec3(a * 0.12), a);
@@ -386,6 +386,9 @@ export class GalaxyManager {
 
   update(dt, t, camPos) {
     const cam = this.engine.camera;
+    // The procedural sample is deterministic: retain a stable prefix while the
+    // budget eases between levels. Named/catalogued stars use a separate layer.
+    this.stars.geometry.setDrawRange(0, Math.round(this.starCount * this.engine.particleScale));
     // camera in model coordinates
     sceneToGal(camPos, this._camModel);
     // camera right/up in model space (rotation only; model axes = galaxy basis)

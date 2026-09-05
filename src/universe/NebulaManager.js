@@ -297,7 +297,7 @@ export class NebulaManager {
     const h = window.innerHeight;
     const fovScale = h / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2));
     let vis = 0;
-    const qSteps = this.engine.q.nebulaSteps;
+    const qSteps = Math.max(12, Math.round(this.engine.q.nebulaSteps * this.engine.volumeStepScale));
     for (const it of this.items) {
       const d = it.pos.distanceTo(camPos);
       const rpx = it.R / Math.max(d - it.R, 1e-6) * fovScale;
