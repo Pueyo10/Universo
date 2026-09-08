@@ -10,10 +10,18 @@ import { LOGDEPTH_PARS_VERT, LOGDEPTH_VERT, LOGDEPTH_PARS_FRAG, LOGDEPTH_FRAG, S
 
 const surfVert = /* glsl */`
   varying vec3 vN; varying vec3 vPos; varying vec2 vUv; varying vec3 vView;
+  #ifdef TILE_SURFACE
+  uniform sampler2D uDem; uniform vec4 uTileUV; uniform float uDemOn, uDemScale;
+  #endif
   ${LOGDEPTH_PARS_VERT}
   void main() {
-    vN = normal; vPos = position; vUv = uv;
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vec3 p = position;
+    #ifdef TILE_SURFACE
+    // real relief: displace the patch along the radius by the elevation (metres × 1/R)
+    if (uDemOn > 0.5) p *= 1.0 + texture2D(uDem, (uv - uTileUV.xy) * uTileUV.zw).r * uDemScale;
+    #endif
+    vN = normal; vPos = p; vUv = uv;
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
     vView = -mv.xyz;
     gl_Position = projectionMatrix * mv;
     ${LOGDEPTH_VERT}
@@ -40,6 +48,7 @@ const surfFrag = /* glsl */`
   uniform sampler2D uParentMap, uBaseMap, uBaseNight, uParentNight;
   uniform vec4 uParentUV, uParentNightUV;
   uniform float uTileFade, uNightFade, uTileSize;
+  uniform sampler2D uDem; uniform float uDemOn, uDemScale, uDemStep; uniform vec2 uDemTexel;   // height field (m), quantisation step (m), metres per texel (east, north)
   #endif
   ${HASH}
   ${SIMPLEX3D}
@@ -88,8 +97,38 @@ const surfFrag = /* glsl */`
       Nn = normalize(T * nm.x * uNormalScale + B * nm.y * uNormalScale + N * nm.z);
     }
     vec3 L = normalize(uSunDir);
+    float terrShadow = 1.0;
+    #ifdef TILE_SURFACE
+    if (uDemOn > 0.5) {
+      // normal from the height field (central differences), replacing the coarse global normal map
+      vec2 duv = (uv - uTileUV.xy) * uTileUV.zw;
+      vec2 e = vec2(1.0 / 256.0, 0.0);
+      float h0 = texture2D(uDem, duv).r;
+      float hx1 = texture2D(uDem, duv + e.xy).r, hx0 = texture2D(uDem, duv - e.xy).r;
+      float hy1 = texture2D(uDem, duv + e.yx).r, hy0 = texture2D(uDem, duv - e.yx).r;
+      vec2 slope = vec2((hx1 - hx0) / (2.0 * uDemTexel.x), (hy1 - hy0) / (2.0 * uDemTexel.y));
+      Nn = normalize(N - T * slope.x - B * slope.y);
+      // self-shadowing: march toward the Sun through the height field (horizon test), soft edge
+      float lt = dot(L, T), lb = dot(L, B), ln = dot(L, N);
+      float lh = length(vec2(lt, lb));
+      if (ln > 0.03 && lh > 1e-4) {
+        vec2 dirUv = vec2(lt / uDemTexel.x, lb / uDemTexel.y) / (lh * 256.0);   // uv step per metre of horizontal travel
+        float rise = ln / lh;                                                   // metres of height gained per metre travelled
+        float stepM = uDemTexel.x * 1.5, excess = 0.0;
+        // the source heights are quantised (8-bit DEMs: ~80–120 m): ignore differences below the step, and start 2 texels out
+        float tol = uDemStep * 1.2 + rise * stepM * 0.5;
+        for (int i = 2; i <= 14; i++) {
+          float sm = stepM * float(i) * (0.7 + 0.3 * float(i) * 0.1);
+          vec2 q = duv + dirUv * sm;
+          if (q.x < 0.004 || q.x > 0.996 || q.y < 0.004 || q.y > 0.996) break;
+          excess = max(excess, texture2D(uDem, q).r - (h0 + rise * sm) - tol);
+        }
+        terrShadow = 1.0 - 0.85 * smoothstep(0.0, max(uDemTexel.x * 0.5, uDemStep * 2.0), excess);
+      }
+    }
+    #endif
     float ndlRaw = dot(N, L);
-    float ndl = max(dot(Nn, L), 0.0);
+    float ndl = max(dot(Nn, L), 0.0) * terrShadow;
     // soft terminator (atmospheric twilight widens it)
     float day = uNoTerminator > 0.5 ? 1.0 : smoothstep(-0.03 - uAtmoStrength * 0.08, 0.10, ndlRaw);
     vec3 albedo = srgb2lin(texture2D(uMap, (uv - uTileUV.xy) * uTileUV.zw).rgb) * uTint;
@@ -208,7 +247,7 @@ const surfFrag = /* glsl */`
     }
     // atmospheric rim tint seen from the surface side
     float rim = pow(1.0 - max(dot(N, V), 0.0), 3.5);
-    col += uAtmoColor * rim * uAtmoStrength * 0.45 * (day * 0.9 + 0.1) * (0.5 + 0.5 * ndl);
+    col += uAtmoColor * rim * uAtmoStrength * 0.12 * (day * 0.9 + 0.1) * (0.5 + 0.5 * ndl);   // the physically based shell carries the limb glow now
     col *= uExposure;
     gl_FragColor = vec4(col, 1.0);
   }
@@ -364,7 +403,7 @@ function sphereGeo(seg) {
 const ATMO_PHYS = {
   earth:   { H: 8.5,  tauR: 0.30, tauM: 0.18, hm: 0.4, tauO: [0.03, 0.035, 0.004] },   // ozone (Chappuis band): 300 DU
   venus:   { H: 15.9, tauR: 4.0,  tauM: 25.0, hm: 0.6 },
-  mars:    { H: 11.1, tauR: 0.05, tauM: 0.45, hm: 0.6 },
+  mars:    { H: 11.1, tauR: 0.035, tauM: 0.22, hm: 0.6 },
   jupiter: { H: 27,   tauR: 0.5,  tauM: 0.5,  hm: 0.6 },
   saturn:  { H: 59.5, tauR: 0.5,  tauM: 0.6,  hm: 0.6 },
   uranus:  { H: 27.7, tauR: 1.5,  tauM: 0.3,  hm: 0.6 },
@@ -514,6 +553,8 @@ export class PlanetRenderer {
     if (eng) {
       if (this.tiles === undefined) this.tiles = (TILE_SOURCES[b.def.id] && eng.q.tiles > 0) ? new TileGlobe(this, TILE_SOURCES[b.def.id], eng.renderer, eng.q.tiles, eng.q.hiRes ? TILE_SOURCES[b.def.id].minHi : TILE_SOURCES[b.def.id].minLo) : null;
       if (this.tiles && camera) { const focal = window.innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)); this.tiles.maxZ = Math.min(this.tiles.src.max, eng.q.tiles); this.tiles.update(camera, u.uCamLocal.value, rpx, focal, eng.dt || 0.016, eng.frame); }
+      // relief tiles dip below the reference sphere (maria, basins): sink the base globe under the lowest terrain while they are active
+      if (this.tiles) { const dm = this.tiles.src.dem; const sink = this.tiles.active && dm ? 1 + (dm.minElev || 0) / this.tiles.radiusM : 1; if (Math.abs(this.surface.scale.x - sink) > 1e-7) this.surface.scale.setScalar(sink); }
       this._hiRes(rpx, eng);
     }
     // geometry LOD

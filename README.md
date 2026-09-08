@@ -132,6 +132,10 @@ render scale, chunk generation).
   is damped from low orbit.
 - **Real sky**: the Milky Way band, bulge, dust lanes and Magellanic Clouds come from the Gaia-based
   NASA SVS star map (view from the Sun; it fades out beyond ~2,000 ly where the 3D galaxy takes over).
+- **Real relief**: close-up tiles are displaced by real elevation data (AWS Terrarium / SRTM for Earth,
+  clamped to sea level; LOLA for the Moon; MOLA for Mars), with normals derived from the height field and
+  self-shadowing by a horizon march toward the Sun. 8-bit sources are smoothed to hide their terraces; the
+  base globe sinks under the lowest terrain while tiles are active so basins never expose it.
 - **Temporal upscaling**: when the dynamic resolution drops, the scene is rendered into a
   fraction of the frame and the TAA history reconstructs the full-resolution image (TAAU), so
   a 50 % render scale keeps smooth edges instead of the old bilinear stretch.
@@ -247,6 +251,7 @@ src/
 Planet maps © [Solar System Scope](https://www.solarsystemscope.com/textures/)
 (CC BY 4.0). Close-up surface tiles: NASA GIBS (Blue Marble Next Generation, VIIRS)
 and NASA Trek (LRO WAC, Viking MDIM 2.1, MESSENGER MDIS).
+Elevation: AWS Terrarium tiles (SRTM/GMTED/ETOPO, Mapzen), LRO LOLA and MGS MOLA DEMs (NASA Trek).
 The sky background is the NASA SVS *Deep Star Maps 2020* (Gaia DR2 + Hipparcos, public domain),
 log-encoded to a 4K galactic-coordinate texture; the catalogue stars are drawn on top of it. Everything else — galaxy, stars, nebulae, moons, Pluto, rings,
 exoplanets, the black hole — is generated procedurally at runtime from seeds.

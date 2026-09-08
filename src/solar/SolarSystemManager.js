@@ -274,7 +274,7 @@ export class SolarSystemManager {
         const day = clamp(0.15 + 0.85 * smoothstep(-0.2, 0.3, up.dot(sunDir)), 0, 1);
         const fwd = this.cameraCtl.getForward(this._v3 || (this._v3 = new THREE.Vector3()));
         const down = clamp(-fwd.dot(up), 0, 1);               // looking down through a thin column: little haze
-        haze = Math.pow(depth, 1.6) * (0.25 + 0.75 * dens) * day * (atmo.thick ? 0.95 : 0.4) * (1 - 0.8 * down);
+        haze = Math.pow(depth, 1.6) * (0.25 + 0.75 * dens) * day * (atmo.thick ? 0.95 : 0.12) * (1 - 0.8 * down);
         const c = atmo.color; fp.uHazeColor.value.setRGB(c[0], c[1], c[2]);
         // realistic flight: buffet at high speed inside the atmosphere
         if (this.cameraCtl.mode === 'SHIP' && this.cameraCtl.ship) {
