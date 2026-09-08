@@ -200,7 +200,8 @@ button { cursor: pointer; }
 .intro-h2 { margin-top: 18px; font-size: clamp(14px, 1.5vw, 18px); font-weight: 500; line-height: 1.5; letter-spacing: 0.12em; padding-left: 0.12em; text-transform: uppercase; color: #edf3ff; text-shadow: var(--text-shadow); text-wrap: balance; }
 .intro-hint { position: absolute; bottom: 28px; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 10px; background: var(--panel); text-align: center; font-size: 13px; line-height: 1.5; letter-spacing: 0.06em; color: var(--text); opacity: 0; transition: opacity 0.5s; }
 .intro-hint.show { opacity: 1; }
-.intro-loading { position: absolute; bottom: 60px; width: 240px; text-align: center; transition: opacity 0.6s; }
+.intro-loading { position: absolute; bottom: 60px; width: 240px; text-align: center; transition: opacity 0.6s; z-index: 1; }
+.intro-title, .intro-hint { z-index: 1; }
 .intro-loading.hide { opacity: 0; }
 .intro-bar { height: 1px; background: rgba(255,255,255,0.12); overflow: hidden; }
 .intro-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #fff); transition: width 0.3s; box-shadow: 0 0 10px var(--accent); }
@@ -460,3 +461,35 @@ button { cursor: pointer; }
   .photo-panel { left: 16px; }
   .caption { max-width: calc(100vw - 32px); width: max-content; }
 }
+
+/* ---- loading cosmos: nebulae, drifting star layers and a tilted spiral galaxy, all transform/opacity animations ---- */
+.intro-cosmos { position: absolute; inset: 0; overflow: hidden; pointer-events: none; opacity: 1; transition: opacity 1.4s ease; background: radial-gradient(ellipse at 50% 55%, #060a16 0%, #02040a 55%, #000 100%); }
+.intro.transparent .intro-cosmos, .intro.fade .intro-cosmos { opacity: 0; }
+.ic-nebula { position: absolute; width: 70vmax; height: 70vmax; border-radius: 50%; filter: blur(48px); mix-blend-mode: screen; will-change: transform; animation: ic-float 46s ease-in-out infinite alternate; }
+.ic-n1 { left: -28vmax; top: -30vmax; background: radial-gradient(circle, rgba(96, 72, 210, 0.42) 0%, rgba(96, 72, 210, 0.14) 35%, transparent 62%); }
+.ic-n2 { right: -30vmax; bottom: -34vmax; background: radial-gradient(circle, rgba(210, 96, 70, 0.30) 0%, rgba(210, 96, 70, 0.10) 35%, transparent 62%); animation-duration: 58s; animation-delay: -22s; }
+.ic-n3 { left: 30vw; top: -45vmax; width: 60vmax; height: 60vmax; background: radial-gradient(circle, rgba(70, 150, 220, 0.24) 0%, transparent 60%); animation-duration: 70s; animation-delay: -40s; }
+@keyframes ic-float { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(6vw, 4vh, 0) scale(1.12); } }
+.ic-stars { position: absolute; left: 0; top: 0; width: 1px; height: 1px; border-radius: 50%; background: transparent; will-change: transform, opacity; }
+.ic-s1 { animation: ic-drift 120s linear infinite, ic-twinkle 3.6s ease-in-out infinite alternate; }
+.ic-s2 { width: 2px; height: 2px; animation: ic-drift 190s linear infinite, ic-twinkle 5.2s ease-in-out infinite alternate-reverse; }
+.ic-s3 { opacity: 0.55; animation: ic-drift 260s linear infinite; }
+@keyframes ic-drift { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-5vw, 2.5vh, 0); } }
+@keyframes ic-twinkle { from { opacity: 0.55; } to { opacity: 1; } }
+.ic-galaxy { position: absolute; left: 50%; top: 50%; width: min(78vmin, 720px); aspect-ratio: 1; transform: translate(-50%, -54%) perspective(1100px) rotateX(62deg) rotateZ(-22deg); transform-style: preserve-3d; }
+.ic-halo { position: absolute; inset: -18%; border-radius: 50%; background: radial-gradient(circle, rgba(255, 236, 205, 0.16) 0%, rgba(150, 175, 255, 0.10) 28%, transparent 62%); filter: blur(20px); }
+.ic-spin { position: absolute; inset: 0; animation: ic-spin 70s linear infinite; will-change: transform; }
+@keyframes ic-spin { to { transform: rotate(360deg); } }
+/* six annuli, each a two-lobed conic gradient turned a little further than the last: together they read as a pair of spiral arms */
+.ic-ring { position: absolute; inset: calc(var(--i) * 7.6%); border-radius: 50%; filter: blur(3px);
+  background: conic-gradient(from calc(var(--i) * 34deg), rgba(160, 190, 255, 0) 0deg, rgba(200, 216, 255, 0.95) 30deg, rgba(255, 230, 200, 0.8) 66deg, rgba(160, 190, 255, 0.12) 120deg, rgba(160, 190, 255, 0) 180deg, rgba(200, 216, 255, 0.95) 210deg, rgba(255, 230, 200, 0.8) 246deg, rgba(160, 190, 255, 0.12) 300deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 66%, #000 76% 94%, transparent 100%); mask: radial-gradient(circle, transparent 0 66%, #000 76% 94%, transparent 100%);
+  opacity: calc(1 - var(--i) * 0.07); }
+.ic-core { position: absolute; left: 50%; top: 50%; width: 42%; height: 42%; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, #fff9ee 0%, rgba(255, 240, 214, 0.95) 6%, rgba(255, 214, 160, 0.55) 18%, rgba(255, 200, 150, 0.16) 40%, transparent 68%); filter: blur(2px); animation: ic-pulse 4.5s ease-in-out infinite alternate; }
+@keyframes ic-pulse { from { transform: translate(-50%, -50%) scale(1); } to { transform: translate(-50%, -50%) scale(1.1); } }
+.ic-orbit { position: absolute; inset: -9%; border-radius: 50%; border: 1px solid rgba(160, 190, 255, 0.14); animation: ic-spin 16s linear infinite; will-change: transform; }
+.ic-orbit i { position: absolute; left: 50%; top: -3px; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: #d8e8ff; box-shadow: 0 0 12px #8fbcff, 0 0 3px #fff; }
+.ic-o2 { inset: -22%; border-color: rgba(255, 210, 170, 0.10); animation-duration: 29s; animation-direction: reverse; }
+.ic-o2 i { width: 4px; height: 4px; margin-left: -2px; background: #ffe2c2; box-shadow: 0 0 10px #ffb070; }
+@media (prefers-reduced-motion: reduce) { .intro-cosmos * { animation: none !important; } }
+@media (max-width: 700px) { .ic-galaxy { width: 96vmin; } }

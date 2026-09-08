@@ -27,6 +27,21 @@ const statusEl = document.getElementById('intro-status');
 i18n.applyDom();
 const progress = (p, msg) => { barEl.style.width = `${Math.round(p * 100)}%`; if (msg) statusEl.textContent = msg; };
 
+// loading-screen starfield: three layers of dots as box-shadows (cheap, and the drift/twinkle animations run on the compositor)
+(function seedLoadingStars() {
+  const cosmos = document.getElementById('intro-cosmos');
+  if (!cosmos) return;
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const tints = ['#ffffff', '#dfe8ff', '#ffe9d2', '#c9d8ff', '#fff2e0'];
+  cosmos.querySelectorAll('.ic-stars').forEach((el, i) => {
+    const n = [420, 160, 300][i];
+    const parts = [];
+    for (let k = 0; k < n; k++) parts.push(`${(rnd() * 120 - 10).toFixed(2)}vw ${(rnd() * 120 - 10).toFixed(2)}vh 0 0 ${tints[(rnd() * tints.length) | 0]}`);
+    el.style.boxShadow = parts.join(',');
+  });
+})();
+
 async function boot() {
   await universe.build(progress);
   // extended modules load lazily so the first frame arrives fast
