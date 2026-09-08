@@ -130,6 +130,8 @@ render scale, chunk generation).
   textures stay resident. This budget does not include local 8K maps or render targets.
 - Cloud decks fade out below ~0.25 radii so the surface can be explored; the ocean glint
   is damped from low orbit.
+- **Real sky**: the Milky Way band, bulge, dust lanes and Magellanic Clouds come from the Gaia-based
+  NASA SVS star map (view from the Sun; it fades out beyond ~2,000 ly where the 3D galaxy takes over).
 - **Temporal upscaling**: when the dynamic resolution drops, the scene is rendered into a
   fraction of the frame and the TAA history reconstructs the full-resolution image (TAAU), so
   a 50 % render scale keeps smooth edges instead of the old bilinear stretch.
@@ -244,7 +246,9 @@ src/
 
 Planet maps © [Solar System Scope](https://www.solarsystemscope.com/textures/)
 (CC BY 4.0). Close-up surface tiles: NASA GIBS (Blue Marble Next Generation, VIIRS)
-and NASA Trek (LRO WAC, Viking MDIM 2.1, MESSENGER MDIS). Everything else — galaxy, stars, nebulae, moons, Pluto, rings,
+and NASA Trek (LRO WAC, Viking MDIM 2.1, MESSENGER MDIS).
+The sky background is the NASA SVS *Deep Star Maps 2020* (Gaia DR2 + Hipparcos, public domain),
+log-encoded to a 4K galactic-coordinate texture; the catalogue stars are drawn on top of it. Everything else — galaxy, stars, nebulae, moons, Pluto, rings,
 exoplanets, the black hole — is generated procedurally at runtime from seeds.
 Orbital elements after Standish (JPL), rotation elements after the IAU WGCCRE
 reports, star data from the Hipparcos / Yale catalogues.

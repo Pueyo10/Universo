@@ -1,8 +1,12 @@
 import * as THREE from 'three';
 import { HASH, SIMPLEX3D } from '../shaders/chunks.js';
-import { GALAXY_MATRIX_INV } from '../core/Units.js';
+import { GALAXY_MATRIX_INV, LY } from '../core/Units.js';
 import { bus } from '../core/EventBus.js';
 
+// Real sky: NASA SVS "Deep Star Maps 2020" (Gaia DR2 + Hipparcos, public domain), galactic equirectangular,
+// log-encoded to 8 bits offline (y = log2(1 + K x) / log2(1 + K xmax)) and decoded in the shader. It carries the
+// Milky Way band, the bulge, the dust lanes and the Magellanic Clouds; the catalogue stars are drawn on top.
+const GAIA_K = 4000.0, GAIA_MAX = 2.128906;
 // Procedural deep-sky background: three/four magnitude tiers of hashed stars
 // (sub-pixel accurate gaussians), faint cosmic dust / nebulosity, and a
 // sprinkle of tiny distant galaxies. Density varies with galactic latitude.
@@ -37,6 +41,7 @@ export class BackgroundSky {
         uGalaxyTiers: { value: engine.q.skyGalaxies },
         uSmooth: { value: this.smoothMap },
         uBand: { value: 0 },
+        uGaia: { value: null }, uGaiaMix: { value: 0 }, uGaiaMax: { value: GAIA_MAX }, uGaiaFade: { value: 1 }, uGaiaScale: { value: 1 },
       },
       vertexShader: /* glsl */`
         varying vec3 vDir;
@@ -51,6 +56,8 @@ export class BackgroundSky {
         uniform float uTime, uPixelAngle, uIntensity, uContrast, uDensity, uGalaxyFade, uTiers, uGalaxyTiers, uBand;
         uniform mat3 uGalInv;
         uniform samplerCube uSmooth;
+        uniform sampler2D uGaia;
+        uniform float uGaiaMix, uGaiaMax, uGaiaFade, uGaiaScale;
         varying vec3 vDir;
         ${HASH}
         ${CUBE_FACE}
@@ -107,7 +114,8 @@ export class BackgroundSky {
           vec2 f; float face; cubeFace(d, f, face);
 
           vec3 col = vec3(0.0);
-          float dens = uDensity * 0.7;
+          float gaiaOn = uGaiaMix * uGaiaFade;
+          float dens = uDensity * 0.7 * (1.0 - 0.45 * gaiaOn);
           float inside = 0.25 + 0.75 * uGalaxyFade;
           col += starTier(f, face, 64.0, 0.16 * dens * inside, 1.6, 1.15, 1.0);
           col += starTier(f, face, 180.0, 0.28 * dens * (0.5 + 0.9 * plane) * inside, 0.55, 1.0, 2.0);
@@ -123,8 +131,18 @@ export class BackgroundSky {
           float neb = sm.r * 1.5, n2 = sm.g * 2.0 - 1.0, dust = sm.b;
           vec3 nebCol = mix(vec3(0.35, 0.3, 0.6), vec3(0.25, 0.45, 0.8), n2 * 0.5 + 0.5);
           nebCol = mix(nebCol, vec3(0.55, 0.35, 0.25), plane * 0.7);
-          col += nebCol * neb * 0.025 * (0.5 + plane);
-          col *= 1.0 - 0.5 * plane * dust;
+          col += nebCol * neb * 0.025 * (0.5 + plane) * (1.0 - 0.8 * gaiaOn);
+          col *= 1.0 - 0.5 * plane * dust * (1.0 - gaiaOn);
+          // the real sky (Gaia), valid while the camera stays within a few thousand light-years of the Sun
+          if (gaiaOn > 0.0) {
+            float l = atan(-g.y, -g.x);                  // galactic longitude: 0 toward the centre, increasing eastward
+            float b = asin(clamp(g.z, -1.0, 1.0));
+            vec2 guv = vec2(0.5 - l / 6.2831853, 0.5 + b / 3.14159265);
+            vec3 e = texture2D(uGaia, guv).rgb;
+            float kx = log2(1.0 + 4000.0 * uGaiaMax);
+            vec3 gaia = (exp2(e * kx) - 1.0) / 4000.0;
+            col += gaia * uGaiaScale * gaiaOn;
+          }
           if (uBand > 0.5) {
             float l = dot(col, vec3(0.3, 0.5, 0.2));
             if (uBand < 1.5) col = vec3(1.0, 0.5, 0.22) * l * 0.8 + vec3(1.0, 0.45, 0.15) * dust * plane * 0.12;   // infrared: dust glows
@@ -144,6 +162,11 @@ export class BackgroundSky {
     this.mesh.matrixAutoUpdate = false;
     engine.scene.add(this.mesh);
     bus.on('quality', () => { this.material.uniforms.uTiers.value = engine.q.skyTiers; this.material.uniforms.uGalaxyTiers.value = engine.q.skyGalaxies; });
+    new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}textures/sky/gaia_4k_gal.jpg`, tex => {
+      tex.colorSpace = THREE.NoColorSpace; tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.anisotropy = Math.min(8, engine.renderer.capabilities.getMaxAnisotropy()); tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+      this.material.uniforms.uGaia.value = tex; this.material.uniforms.uGaiaMix.value = 1;
+    });
   }
 
   /** Render the low-frequency nebulosity / dust fields once into a small cubemap. */
@@ -186,5 +209,8 @@ export class BackgroundSky {
     u.uTime.value = t;
     const h = this.engine.renderer.getDrawingBufferSize(this._size || (this._size = new THREE.Vector2())).y;
     u.uPixelAngle.value = THREE.MathUtils.degToRad(cam.fov) / h;
+    // the Gaia map is the view from the Sun: fade it out between 2,000 and 20,000 ly away (the 3D galaxy model takes over)
+    const dSunLy = cam.position.length() / LY;
+    u.uGaiaFade.value = u.uGalaxyFade.value * (1 - THREE.MathUtils.smoothstep(dSunLy, 2000, 20000));
   }
 }
