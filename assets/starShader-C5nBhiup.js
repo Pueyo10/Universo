@@ -1,4 +1,4 @@
-import{d as e}from"./Units-BUZL48Ps.js";import{g as t,h as n,m as r,p as i,u as a}from"./index-CKGQ5RVM.js";var o=`
+import{d as e}from"./Units-7I29pGWZ.js";import{g as t,h as n,m as r,p as i,u as a}from"./index-CgByzoUA.js";var o=`
   attribute float lum;
   attribute vec3 color;
   attribute float seed;
@@ -35,7 +35,7 @@ import{d as e}from"./Units-BUZL48Ps.js";import{g as t,h as n,m as r,p as i,u as 
     float r2 = dot(c, c) * 4.0;
     if (r2 > 1.0) discard;
     float core = exp(-r2 * 9.0);
-    float halo = exp(-r2 * 2.0) * 0.28;
+    float halo = exp(-r2 * 2.0) * 0.09;
     float spikes = 0.0;
     if (vSize > 14.0) {
       float ang = atan(c.y, c.x);

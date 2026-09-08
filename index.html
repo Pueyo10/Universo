@@ -7,14 +7,14 @@
   <meta name="description" content="A real-time explorable 3D universe: Milky Way, Solar System, planets, moons, nebulae and Sagittarius A*. Universo 3D explorable en tiempo real." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%225%22 fill=%22%23fff%22/%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2212%22 fill=%22none%22 stroke=%22%237fb4ff%22 stroke-width=%221.5%22 opacity=%22.7%22/%3E%3C/svg%3E" />
-  <script type="module" crossorigin src="./assets/index-CKGQ5RVM.js"></script>
+  <script type="module" crossorigin src="./assets/index-CgByzoUA.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/three.core-CpYT6u8q.js">
   <link rel="modulepreload" crossorigin href="./assets/EventBus-DzLmJ1Bg.js">
-  <link rel="modulepreload" crossorigin href="./assets/Units-BUZL48Ps.js">
+  <link rel="modulepreload" crossorigin href="./assets/Units-7I29pGWZ.js">
   <link rel="modulepreload" crossorigin href="./assets/Random-BQY5ImTV.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-CdZH4sWA.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-Bog0zgLj.css">
 </head>
 <body>
   <div id="app">
@@ -261,6 +261,9 @@
         <label class="row"><span data-i18n="fov">Field of view</span><input id="set-fov" type="range" min="30" max="90" step="1" value="55"></label>
         <label class="row"><span data-i18n="sensitivity">Mouse sensitivity</span><input id="set-sens" type="range" min="0.3" max="2.5" step="0.05" value="1"></label>
         <label class="row"><span data-i18n="autoExposure">Auto exposure</span><input id="set-autoexp" type="checkbox" checked></label>
+        <label class="row"><span data-i18n="exposureLock">Lock exposure</span><input id="set-exposure-lock" type="checkbox"></label>
+        <label class="row"><span data-i18n="exposureMeter">Metering</span><select id="set-exposure-meter"><option value="frame" data-i18n="meterFrame">Whole view</option><option value="target" data-i18n="meterTarget">Selected object</option></select></label>
+        <label class="row"><span data-i18n="observationMode">Observation (no lens effects)</span><input id="set-observation" type="checkbox"></label>
         <label class="row"><span data-i18n="lensEffects">Lens effects</span><input id="set-lens" type="checkbox" checked></label>
         <label class="row"><span data-i18n="motionBlur">Motion blur</span><input id="set-motion" type="checkbox" checked></label>
         <label class="row"><span data-i18n="dof">Depth of field</span><input id="set-dof" type="checkbox" checked></label>
