@@ -3,8 +3,9 @@ import { LOGDEPTH_PARS_VERT, LOGDEPTH_VERT, LOGDEPTH_PARS_FRAG, LOGDEPTH_FRAG, S
 import { Rng } from '../core/Random.js';
 import { RING_OPTICS, RING_ECLIPSE } from '../shaders/ringOptics.js';
 
-// Planetary rings: a radial density profile with real gaps (Cassini, Encke,
-// Keeler…), lit and unlit sides, forward scattering when backlit, the planet's
+// Planetary rings: a radial optical-depth profile (Saturn: measured by Cassini
+// UVIS, see tools/rings_profile.py), lit and unlit sides, backscattering ice and
+// forward-scattering dust, the planet's
 // shadow cast analytically across the ring plane, azimuthal clumping when
 // close, and an instanced field of ice boulders around the camera when it
 // flies through the ring plane.
@@ -21,8 +22,8 @@ const ringVert = /* glsl */`
 const ringFrag = /* glsl */`
   precision highp float;
   varying vec3 vPos; varying vec2 vUv;
-  uniform sampler2D uTex; uniform vec3 uSunDir, uCamLocal;
-  uniform float uInner, uOuter, uTime, uExposure, uDetail, uFaint, uPlanetFlat;
+  uniform sampler2D uTex, uDust; uniform vec3 uSunDir, uCamLocal;
+  uniform float uInner, uOuter, uTime, uExposure, uDetail, uFaint, uPlanetFlat, uKm, uGain;
   uniform vec4 uMoons[4]; uniform int uMoonCount;
   uniform float uSunAngular;
   ${RING_OPTICS}
@@ -35,24 +36,32 @@ const ringFrag = /* glsl */`
     float r = length(vPos.xz);
     float t = (r - uInner) / (uOuter - uInner);
     if (t < 0.0 || t > 1.0) discard;
-    vec4 s = texture2D(uTex, vec2(t, 0.5));
-    float a = s.a;
-    // fine azimuthal / radial structure when close
-    float ang = atan(vPos.z, vPos.x);
-    if (uDetail > 0.001) {
-      float n1 = snoise(vec3(t * 900.0, ang * 60.0, 0.0)) * 0.5 + 0.5;
-      float n2 = snoise(vec3(t * 3000.0, ang * 20.0, 3.0)) * 0.5 + 0.5;
-      a *= mix(1.0, 0.6 + 0.8 * n1 * (0.5 + n2), uDetail);
+    vec4 s = texture2D(uTex, vec2(t, 0.5));        // rgb: particle albedo, a: normal opacity
+    float dust = texture2D(uDust, vec2(t, 0.5)).r;  // share of tau in micron dust
+    float tau = ringOpticalDepth(s.a * uFaint);
+    // Structure below the profile's ~9 km texels (self-gravity wakes, clumps):
+    // azimuthally stretched, and faded out before it can alias.
+    if (uDetail > 0.001 && tau > 0.02) {
+      float rk = r * uKm;
+      float fp = fwidth(rk);
+      float k = uDetail * (1.0 - smoothstep(0.6, 2.5, fp));
+      if (k > 0.0) {
+        float arc = atan(vPos.z, vPos.x) * rk;
+        float n = snoise(vec3(rk * 0.45, arc * 0.05, 0.0)) * 0.6 + snoise(vec3(rk * 1.7, arc * 0.2, 5.0)) * 0.4;
+        tau *= 1.0 + 0.35 * k * n;
+      }
     }
-    if (a < 0.003) discard;
+    if (tau < 1e-5) discard;
     vec3 L = normalize(uSunDir);
     vec3 view = uCamLocal - vPos;
     view.y *= uPlanetFlat; // undo the body's flattening: angles use Euclidean space
     vec3 V = normalize(view);
     float nl = L.y;   // ring normal = +Y
     float nv = V.y;
+    // Lit face: sunlight scattered back out of the slab. Unlit face: only light
+    // that crossed it, so opaque bands (B ring) go dark and thin ones (C ring,
+    // Cassini Division) glow.
     bool sameSide = (nl * nv) > 0.0;
-    float tau = ringOpticalDepth(a * uFaint);
     float alpha = 1.0 - ringTransmission(tau, nv);
     float scatter = ringScatter(tau, abs(nl), abs(nv), sameSide);
     // planet shadow: does the sun ray from this point hit the (slightly flattened) planet?
@@ -68,14 +77,29 @@ const ringFrag = /* glsl */`
       if (i >= uMoonCount) break;
       shadow *= ringMoonVisibility(vPos, L, uMoons[i], uSunAngular);
     }
-    // Bounded Henyey-Greenstein forward lobe (g=0.55), plus diffuse ice.
-    // Slab extinction makes dense bands dark from the unlit side.
-    float phase = 0.75 + 0.25 * 0.6975 / pow(max(1.3025 - 1.1 * dot(-V, L), 0.2025), 1.5);
-    vec3 col = s.rgb * (0.018 * alpha + 1.5 * phase * scatter * shadow);
+    // I/F = albedo x phase / 4 x slab integral. Macroscopic ice backscatters
+    // (dark when backlit); dust forward-scatters (F ring, D ring and gap ringlets
+    // light up at high phase). Multiple scattering brightens dense, bright bands.
+    float cosA = dot(L, V);
+    float wbar = dot(s.rgb, vec3(0.3333));
+    float ms = 1.0 + (sameSide ? 1.5 : 0.5) * wbar * (1.0 - exp(-tau));
+    vec3 particles = s.rgb * (ringPhaseParticles(cosA) * ms);
+    vec3 grains = vec3(0.80, 0.80, 0.82) * ringPhaseDust(cosA);
+    vec3 col = 0.25 * uGain * scatter * shadow * mix(particles, grains, dust);
+    // Saturnshine: the planet's day side lights both faces, strongest near it.
+    float k = 0.5 + 0.5 * dot(normalize(vPos), L);
+    col += s.rgb * ms * (0.25 * uGain * 0.35 * k / (r * r)) * alpha * (1.0 - dust);
     col *= uExposure;
     gl_FragColor = vec4(col, alpha); // slab integral is already premultiplied
   }
 `;
+
+/** Constant dust-fraction texture for rings without a measured profile. */
+export function ringDustTexture(fraction) {
+  const t = new THREE.DataTexture(new Uint8Array([Math.round(fraction * 255), 0, 0, 255]), 1, 1);
+  t.needsUpdate = true;
+  return t;
+}
 
 const rockVert = /* glsl */`
   attribute vec3 iOffset; attribute vec4 iRot; attribute float iScale;
@@ -121,7 +145,7 @@ export class Rings {
     // rotate to XZ plane (RingGeometry is in XY)
     geo.rotateX(-Math.PI / 2);
     this.material = new THREE.ShaderMaterial({
-      uniforms: { uTex: { value: tex }, uSunDir: { value: new THREE.Vector3(1, 0, 0) }, uCamLocal: { value: new THREE.Vector3() }, uInner: { value: this.inner }, uOuter: { value: this.outer }, uTime: { value: 0 }, uExposure: { value: 1 }, uDetail: { value: 0 }, uFaint: { value: def.faint ? (def.veryFaint ? 0.35 : 0.6) : 1 }, uPlanetFlat: { value: 1 - (body.def.oblateness || 0) } },
+      uniforms: { uTex: { value: tex }, uDust: { value: opts.dust || ringDustTexture(0.05) }, uKm: { value: body.radiusKm || 60268 }, uGain: { value: 1.15 }, uSunDir: { value: new THREE.Vector3(1, 0, 0) }, uCamLocal: { value: new THREE.Vector3() }, uInner: { value: this.inner }, uOuter: { value: this.outer }, uTime: { value: 0 }, uExposure: { value: 1 }, uDetail: { value: 0 }, uFaint: { value: def.faint ? (def.veryFaint ? 0.35 : 0.6) : 1 }, uPlanetFlat: { value: 1 - (body.def.oblateness || 0) } },
       vertexShader: ringVert, fragmentShader: ringFrag, transparent: true, depthWrite: false, side: THREE.DoubleSide,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
     });
@@ -183,7 +207,8 @@ export class Rings {
     const n = this.maxRocks;
     // spread: 3×3 cells around camera
     const geo = this.rocks.geometry;
-    const tex = this.tex.image?.data; const tw = this.tex.image?.width || 1;
+    const opac = this.tex.userData?.opacity;   // measured profile (float)
+    const tex = this.tex.image?.data; const tw = opac ? opac.length : (this.tex.image?.width || 1);
     let i = 0;
     for (let k = 0; k < n; k++) {
       const rr = r + (rng.float() - 0.5) * cellR * 3;
@@ -192,13 +217,14 @@ export class Rings {
       const t = (rr - this.inner) / (this.outer - this.inner);
       if (t < 0 || t > 1) continue;
       let dens = 0.7;
-      if (tex) dens = tex[Math.floor(t * (tw - 1)) * 4 + 3] / 255;
+      if (opac) dens = opac[Math.floor(t * (tw - 1))];
+      else if (tex) dens = tex[Math.floor(t * (tw - 1)) * 4 + 3] / 255;
       if (rng.float() > dens) continue;
       const y = rng.gauss() * 0.00006;   // ring thickness ~ tens of metres in planet radii
       this.iOffset[i * 3] = Math.cos(aa) * rr; this.iOffset[i * 3 + 1] = y; this.iOffset[i * 3 + 2] = Math.sin(aa) * rr;
       const ax = rng.unitVector();
       this.iRot[i * 4] = ax[0]; this.iRot[i * 4 + 1] = ax[1]; this.iRot[i * 4 + 2] = ax[2]; this.iRot[i * 4 + 3] = rng.float();
-      // sizes: metres to tens of metres in planet-radius units (Saturn R = 58,232 km): 1 m = 1.7e-8
+      // sizes: metres to tens of metres in planet-radius units (Saturn R = 60,268 km): 1 m = 1.66e-8
       this.iScale[i] = (0.3 + 20 * Math.pow(rng.float(), 3)) * 1.7e-8 * 60;
       i++;
     }

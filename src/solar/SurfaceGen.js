@@ -245,14 +245,16 @@ export function generateSurfaceData(recipe, opts = {}) {
   return { w, h, color, normal, emis, spec };
 }
 
-export function generateRingData(kind = 'saturn', width = 2048) {
+export function generateRingData(kind = 'saturn', width = 2048, rangeKm = null) {
   const data = new Uint8ClampedArray(width * 4);
   const n = new SimplexNoise(kind === 'saturn' ? 99 : kind === 'uranus' ? 77 : 55);
   for (let i = 0; i < width; i++) {
-    const t = i / (width - 1); // 0 = inner edge, 1 = outer edge
+    let t = i / (width - 1); // 0 = inner edge, 1 = outer edge
     let a = 0, r = 0.85, g = 0.8, b = 0.72;
     if (kind === 'saturn') {
-      // radii mapping: inner 1.239 → outer 2.347 Rs (C ring start to A ring end); F ring beyond handled separately
+      // radii in units of 58,232 km: inner 1.239 → outer 2.347 (C ring start to A ring end)
+      if (rangeKm) t = (rangeKm[0] + t * (rangeKm[1] - rangeKm[0]) - 72150) / (136670 - 72150);
+      if (t < 0 || t > 1) { data[i * 4 + 3] = 0; continue; }
       const R = 1.239 + t * (2.347 - 1.239);
       const fine = n.noise2D(t * 260, 0.5) * 0.5 + 0.5;
       const fine2 = n.noise2D(t * 900, 3.5) * 0.5 + 0.5;

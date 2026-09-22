@@ -106,9 +106,12 @@ export const PLANETS = [
     facts: ['Jupiter\'s fast spin flattens it visibly at the poles.', 'Its four Galilean moons were the first objects found to orbit another planet (1610).', 'Radiation near Io would kill an unprotected human in minutes.', 'Jupiter has faint rings of dust knocked off its small inner moons.'],
   },
   {
-    id: 'saturn', name: 'Saturn', kind: 'planet', color: '#e8d5a0', radiusKm: 58232, massKg: 5.6834e26, elements: 'saturn', rotation: 'saturn',
+    // radiusKm is the equatorial radius (the body's x/z scale; oblateness flattens y to the 54,364 km pole)
+    id: 'saturn', name: 'Saturn', kind: 'planet', color: '#e8d5a0', radiusKm: 60268, massKg: 5.6834e26, elements: 'saturn', rotation: 'saturn',
     texture: T('2k_saturn.jpg'), ringTexture: T('2k_saturn_ring_alpha.png'), type: 'gas', oblateness: 0.09796,
-    rings: { inner: 1.239, outer: 2.347, fRing: 2.41 },
+    // D ring inner edge (66,900 km) to beyond the F ring (141,100 km), in equatorial radii; must match
+    // the radial range of the Cassini UVIS profile written by tools/rings_profile.py
+    rings: { inner: 66900 / 60268, outer: 141100 / 60268, profile: 'textures/saturn_rings_cassini.bin' },
     atmosphere: { color: [0.95, 0.88, 0.7], height: 0.010, density: 0.2, mie: 0.35, rayleigh: [0.7, 0.62, 0.45], gas: true },
     subtitle: 'Sixth planet · the ringed jewel',
     data: { type: 'Gas giant', radius: '58,232 km (9.1 × Earth)', mass: '5.68 × 10²⁶ kg (95 × Earth)', semiMajorAxis: '9.537 AU (1.43 billion km)', orbitalPeriod: '29.45 years', rotationPeriod: '10 h 33 m', gravity: '10.44 m/s²', meanTemp: '−139 °C', axialTilt: '26.73°', moons: '146 known', density: '0.687 g/cm³ (less than water)', atmosphere: '96% H₂ · 3% He' },
