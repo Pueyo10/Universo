@@ -6,3 +6,4 @@ dist
 shots/
 .playwright-cli/
 output/playwright/
+.claude/worktrees/
