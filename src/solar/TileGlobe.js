@@ -202,7 +202,7 @@ export class TileGlobe {
     t.fade = Math.min(1, t.fade + this.dt / 0.3);
     if (t.nightTex) t.nightFade = Math.min(1, t.nightFade + this.dt / 0.4);
     if (!t.mesh) {
-      const u = Object.assign({}, base.uniforms, { uMap: { value: t.tex }, uTileUV: { value: t.uvRect }, uNightMap: { value: t.nightTex || base.uniforms.uNightMap.value }, uNightTileUV: { value: t.nightTex ? t.uvRect : IDENTITY_UV }, uParentMap: { value: fallback }, uParentUV: { value: t.fallback?.uvRect || IDENTITY_UV }, uBaseMap: base.uniforms.uMap, uBaseNight: base.uniforms.uNightMap, uTileFade: { value: 0 }, uNightFade: { value: 0 }, uTileSize: { value: this.src.size }, uDem: { value: this.dummyDem }, uDemOn: { value: 0 }, uDemScale: { value: 1 / this.radiusM }, uDemTexel: { value: this._demTexel(t) }, uDemStep: { value: this.src.dem ? (this.src.dem.kind === 'gray8' ? (this.src.dem.range[1] - this.src.dem.range[0]) / 255 * 0.35 : 2) : 0 } });
+      const u = Object.assign({}, base.uniforms, { uMap: { value: t.tex }, uTileUV: { value: t.uvRect }, uNightMap: { value: t.nightTex || base.uniforms.uNightMap.value }, uNightTileUV: { value: t.nightTex ? t.uvRect : IDENTITY_UV }, uParentMap: { value: fallback }, uParentUV: { value: t.fallback?.uvRect || IDENTITY_UV }, uBaseMap: base.uniforms.uMap, uBaseNight: base.uniforms.uNightMap, uTileFade: { value: 0 }, uNightFade: { value: 0 }, uTileSize: { value: this.src.size }, uBaseTexels: { value: 64 }, uDem: { value: this.dummyDem }, uDemOn: { value: 0 }, uDemScale: { value: 1 / this.radiusM }, uDemTexel: { value: this._demTexel(t) }, uDemStep: { value: this.src.dem ? (this.src.dem.kind === 'gray8' ? (this.src.dem.range[1] - this.src.dem.range[0]) / 255 * 0.35 : 2) : 0 } });
       const mat = new THREE.ShaderMaterial({ uniforms: u, vertexShader: base.vertexShader, fragmentShader: base.fragmentShader, defines: { TILE_BIAS: ((t.z + 1) * 1.5e-7).toExponential(2), TILE_SURFACE: 1 } });
       u.uParentNight = { value: fallbackNight }; u.uParentNightUV = { value: nightParent?.uvRect || IDENTITY_UV };
       t.mesh = new THREE.Mesh(tileGeometry(t.lon0, t.lon1, t.lat0, t.lat1, this.src.dem ? 40 : 16), mat);
@@ -216,6 +216,7 @@ export class TileGlobe {
     u.uNightTileUV.value = t.nightTex ? t.uvRect : IDENTITY_UV;
     u.uTileFade.value = t.fade; u.uNightFade.value = t.nightFade;
     u.uDem.value = t.dem || this.dummyDem; u.uDemOn.value = t.dem ? 1 : 0;
+    const bimg = base.uniforms.uMap.value && base.uniforms.uMap.value.image; u.uBaseTexels.value = ((bimg && bimg.width) || 2048) * (t.lon1 - t.lon0) / 360;
     t.mesh.visible = true;
   }
   /** metres per height texel along east and north at the tile's centre latitude */

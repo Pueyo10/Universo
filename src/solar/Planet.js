@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TileGlobe, TILE_SOURCES, HIRES, loadHiRes } from './TileGlobe.js';
+import { AtmosphereLUT } from './AtmosphereLUT.js';
 import { RING_OPTICS } from '../shaders/ringOptics.js';
 import { LOGDEPTH_PARS_VERT, LOGDEPTH_VERT, LOGDEPTH_PARS_FRAG, LOGDEPTH_FRAG, SIMPLEX3D, HASH } from '../shaders/chunks.js';
 
@@ -47,7 +48,7 @@ const surfFrag = /* glsl */`
   #ifdef TILE_SURFACE
   uniform sampler2D uParentMap, uBaseMap, uBaseNight, uParentNight;
   uniform vec4 uParentUV, uParentNightUV;
-  uniform float uTileFade, uNightFade, uTileSize;
+  uniform float uTileFade, uNightFade, uTileSize, uBaseTexels;   // uBaseTexels: base-map texels across this tile
   uniform sampler2D uDem; uniform float uDemOn, uDemScale, uDemStep; uniform vec2 uDemTexel;   // height field (m), quantisation step (m), metres per texel (east, north)
   #endif
   ${HASH}
@@ -137,14 +138,18 @@ const surfFrag = /* glsl */`
     vec2 parentUv = (uv - uParentUV.xy) * uParentUV.zw;
     vec3 baseAlbedo = srgb2lin(texture2D(uBaseMap, uv).rgb) * uTint;
     vec3 parentAlbedo = srgb2lin(texture2D(uParentMap, parentUv).rgb) * uTint;
-    // Match only the low-frequency ocean colour, preserving NASA's fine detail.
-    // The existing specular mask identifies water; land remains untouched.
-    if (uHasSpec > 0.5) {
-      float water = smoothstep(0.4, 0.9, texture2D(uSpecMap, uv).r);
-      vec3 lowTile = srgb2lin(textureLod(uMap, tileUv, 4.0).rgb) * uTint;
-      vec3 lowParent = srgb2lin(textureLod(uParentMap, parentUv, 4.0).rgb) * uTint;
-      albedo = max(vec3(0.0), albedo + (baseAlbedo - lowTile) * water * 0.85);
-      if (uParentUV.z > 1.0) parentAlbedo = max(vec3(0.0), parentAlbedo + (baseAlbedo - lowParent) * water * 0.85);
+    // Different missions, different processing (Viking vs Solar System Scope, Blue Marble oceans...): keep the tile's fine
+    // detail but take the base map's tone. Both are averaged over ~8 texels of the tile footprint and matched by ratio.
+    {
+      float tileLod = log2(max(uTileSize / 8.0, 1.0));
+      float baseLod = log2(max(uBaseTexels / 8.0, 1.0));
+      vec3 lowBase = srgb2lin(textureLod(uBaseMap, uv, baseLod).rgb) * uTint;
+      vec3 lowTile = srgb2lin(textureLod(uMap, tileUv, tileLod).rgb) * uTint;
+      albedo *= clamp(lowBase / max(lowTile, vec3(0.004)), vec3(0.35), vec3(3.0));
+      if (uParentUV.z > 1.0) {
+        vec3 lowParent = srgb2lin(textureLod(uParentMap, parentUv, tileLod).rgb) * uTint;
+        parentAlbedo *= clamp(lowBase / max(lowParent, vec3(0.004)), vec3(0.35), vec3(3.0));
+      }
     }
     albedo = mix(parentAlbedo, albedo, smoothstep(0.0, 1.0, uTileFade));
     // Resolve the final pixel at a tile boundary against the shared base map.
@@ -303,19 +308,21 @@ const atmoFrag = /* glsl */`
   uniform float uPlanetR, uAtmoR, uHr, uHm, uTauM, uExposure, uSunIntensity, uHaze;
   uniform int uSteps;
   uniform float uOutside;   // 1: camera outside the shell mesh (front faces), 0: inside (back faces)
+  uniform sampler2D tTrans, tMulti;   // precomputed transmittance T(r, mu) and multiple scattering psi(r, mu_sun)
+  uniform float uMsScale;
   ${LOGDEPTH_PARS_FRAG}
   vec2 raySphere(vec3 ro, vec3 rd, float R) {
     float b = dot(ro, rd); float c = dot(ro, ro) - R * R; float h = b * b - c;
     if (h < 0.0) return vec2(-1.0);
     h = sqrt(h); return vec2(-b - h, -b + h);
   }
-  // Chapman grazing-incidence function (Schüler, GPU Pro 3): optical depth from altitude h (in scale heights) to space along a
-  // direction with zenith cosine c, in units of beta * H. X = planet radius in scale heights.
-  float chapman(float X, float h, float c) {
-    float k = sqrt(X + h);
-    if (c >= 0.0) return k / (k * c + 1.0) * exp(-h);
-    float x0 = sqrt(1.0 - c * c) * (X + h);
-    return 2.0 * sqrt(x0) * exp(min(X - x0, 0.0)) - k / (1.0 - k * c) * exp(-h);
+  vec2 transUv(float r, float mu) {
+    float H = sqrt(max(0.0, uAtmoR * uAtmoR - uPlanetR * uPlanetR));
+    float rho = sqrt(max(0.0, r * r - uPlanetR * uPlanetR));
+    float disc = r * r * (mu * mu - 1.0) + uAtmoR * uAtmoR;
+    float d = max(0.0, -r * mu + sqrt(max(disc, 0.0)));
+    float dMin = uAtmoR - r, dMax = rho + H;
+    return vec2(clamp((d - dMin) / max(dMax - dMin, 1e-6), 0.0, 1.0), clamp(rho / max(H, 1e-6), 0.0, 1.0));
   }
   void main() {
     if (uOutside > 0.5 ? !gl_FrontFacing : gl_FrontFacing) discard;
@@ -336,6 +343,7 @@ const atmoFrag = /* glsl */`
     vec3 betaR = uTauR / Hr;                           // vertical optical depth = beta * H
     vec3 betaE = (uTauR + uTauO) / Hr;                 // extinction: scattering + ozone absorption (same profile, simplification)
     float betaM = uTauM / Hm;
+    float shellH = uAtmoR - uPlanetR;
     float mu = dot(rd, L);
     float phaseR = 3.0 / (16.0 * 3.14159) * (1.0 + mu * mu);
     float g = 0.76; float g2 = g * g;
@@ -344,7 +352,7 @@ const atmoFrag = /* glsl */`
     float tc = clamp(-dot(ro, rd), t0, t1);
     float a = clamp((tc - t0) / len, 0.001, 0.999);
     float lA = tc - t0, lB = t1 - tc;
-    vec3 sumR = vec3(0.0), sumM = vec3(0.0);
+    vec3 sumR = vec3(0.0), sumM = vec3(0.0), sumMS = vec3(0.0);
     float odR = 0.0, odM = 0.0;
     float N = float(uSteps);
     float tPrev = t0;
@@ -362,20 +370,18 @@ const atmoFrag = /* glsl */`
       float dR = exp(-h / Hr) * dt, dM = exp(-h / Hm) * dt;
       float vR = odR + 0.5 * dR, vM = odM + 0.5 * dM;   // view optical depth up to the sample
       odR += dR; odM += dM;
-      // sunlight: none where the ray to the Sun hits the planet; otherwise the Chapman optical depth to space
+      vec3 Tview = exp(-(betaE * vR + betaM * 1.1 * vM));
+      float c = dot(p, L) / r;
+      // multiple scattering (isotropic, precomputed): reaches into the planet's shadow and whitens the twilight
+      vec3 psi = texture2D(tMulti, vec2(c * 0.5 + 0.5, clamp(h / shellH, 0.0, 1.0))).rgb;
+      sumMS += Tview * (betaR * dR + betaM * uMieColor * dM) * psi;
+      // direct sunlight: none where the ray to the Sun hits the planet; otherwise the precomputed transmittance to space
       vec2 tpl = raySphere(p, L, uPlanetR);
       if (tpl.x > 0.0) continue;
-      float c = dot(p, L) / r;
-      float lR = Hr * chapman(XR, h / Hr, c), lM = Hm * chapman(XM, h / Hm, c);
-      vec3 att = exp(-(betaE * (vR + lR) + betaM * 1.1 * (vM + lM)));
+      vec3 att = Tview * texture2D(tTrans, transUv(r, c)).rgb;
       sumR += dR * att; sumM += dM * att;
     }
-    vec3 inscatter = uSunIntensity * (sumR * betaR * phaseR + sumM * betaM * phaseM * uMieColor);
-    // single scattering leaves a green band where blue is gone but red is weakly scattered; real twilights are whitened by
-    // multiple scattering, so pull green-dominant in-scatter toward grey
-    float lum = dot(inscatter, vec3(0.3, 0.59, 0.11));
-    float greenish = clamp((inscatter.g - max(inscatter.r, inscatter.b)) / (lum + 1e-4) * 3.0, 0.0, 1.0);
-    inscatter = mix(inscatter, vec3(lum), greenish * 0.85);
+    vec3 inscatter = uSunIntensity * (sumR * betaR * phaseR + sumM * betaM * phaseM * uMieColor + sumMS * uMsScale);
     vec3 trans = exp(-(betaE * odR + betaM * odM));
     float alpha = 1.0 - dot(trans, vec3(0.333));
     // extra thick haze term for Venus/Titan style atmospheres (multiple scattering approximation)
@@ -401,9 +407,9 @@ function sphereGeo(seg) {
  * Earth: tau_R ~ 0.30 at 440 nm, aerosol tau ~ 0.1 (clear day), H = 8.5 km, aerosols ~1.2 km.
  */
 const ATMO_PHYS = {
-  earth:   { H: 8.5,  tauR: 0.30, tauM: 0.18, hm: 0.4, tauO: [0.03, 0.035, 0.004] },   // ozone (Chappuis band): 300 DU
-  venus:   { H: 15.9, tauR: 4.0,  tauM: 25.0, hm: 0.6 },
-  mars:    { H: 11.1, tauR: 0.035, tauM: 0.22, hm: 0.6 },
+  earth:   { H: 8.5,  tauR: 0.30, tauM: 0.18, hm: 0.4, tauO: [0.03, 0.035, 0.004], albedo: 0.3 },   // ozone (Chappuis band): 300 DU
+  venus:   { H: 15.9, tauR: 4.0,  tauM: 25.0, hm: 0.6, albedo: 0.75 },
+  mars:    { H: 11.1, tauR: 0.035, tauM: 0.22, hm: 0.6, albedo: 0.25 },
   jupiter: { H: 27,   tauR: 0.5,  tauM: 0.5,  hm: 0.6 },
   saturn:  { H: 59.5, tauR: 0.5,  tauM: 0.6,  hm: 0.6 },
   uranus:  { H: 27.7, tauR: 1.5,  tauM: 0.3,  hm: 0.6 },
@@ -415,7 +421,7 @@ const ATMO_PHYS = {
 function atmoPhysics(def, atmo) {
   const Rkm = def.radiusKm || def.r || 6371;
   const ph = ATMO_PHYS[def.id] || { H: 0.25 * Rkm * atmo.height, tauR: 0.3 * (atmo.density || 1), tauM: 0.1 * (atmo.mie || 0.5) * (atmo.density || 1), hm: 0.5 };
-  return { hr: THREE.MathUtils.clamp(ph.H / (Rkm * atmo.height), 0.02, 0.9), hm: ph.hm, tauR: ph.tauR, tauM: ph.tauM, tauO: ph.tauO, sun: 3.5 };
+  return { hr: THREE.MathUtils.clamp(ph.H / (Rkm * atmo.height), 0.02, 0.9), hm: ph.hm, tauR: ph.tauR, tauM: ph.tauM, tauO: ph.tauO, albedo: ph.albedo ?? 0.35, sun: 1.6 };   // in-scatter strength: calibrated against orbital photographs (deep blue oceans, soft veil)
 }
 
 export class PlanetRenderer {
@@ -463,11 +469,17 @@ export class PlanetRenderer {
     if (atmo) {
       const h = atmo.height;
       const ph = atmoPhysics(def, atmo);
+      const tauR = new THREE.Vector3(...atmo.rayleigh).multiplyScalar(ph.tauR), tauO = new THREE.Vector3(...(ph.tauO || [0, 0, 0]));
+      const Hr = ph.hr * h, Hm = ph.hr * ph.hm * h;
+      // precomputed transmittance + multiple scattering tables for this atmosphere
+      const renderer = body.manager && body.manager.engine && body.manager.engine.renderer;
+      this.atmoLut = renderer ? new AtmosphereLUT(renderer, { Rt: 1 + h, Hr, Hm, betaR: tauR.clone().divideScalar(Hr), betaE: tauR.clone().add(tauO).divideScalar(Hr), betaM: ph.tauM / Hm, betaMe: ph.tauM / Hm * 1.1, albedo: ph.albedo }) : null;
       this.atmoMat = new THREE.ShaderMaterial({
         uniforms: {
-          uSunDir: u.uSunDir, uCamLocal: u.uCamLocal, uTauR: { value: new THREE.Vector3(...atmo.rayleigh).multiplyScalar(ph.tauR) }, uTauO: { value: new THREE.Vector3(...(ph.tauO || [0, 0, 0])) }, uMieColor: { value: new THREE.Vector3(...atmo.color) },
+          uSunDir: u.uSunDir, uCamLocal: u.uCamLocal, uTauR: { value: tauR }, uTauO: { value: tauO }, uMieColor: { value: new THREE.Vector3(...atmo.color) },
           uPlanetR: { value: 1.0 }, uAtmoR: { value: 1 + h }, uHr: { value: ph.hr }, uHm: { value: ph.hr * ph.hm }, uTauM: { value: ph.tauM }, uExposure: { value: 1 }, uSunIntensity: { value: ph.sun }, uHaze: { value: atmo.thick ? 0.8 : 0 },
           uSteps: { value: 12 }, uOutside: { value: 1 },
+          tTrans: { value: this.atmoLut ? this.atmoLut.transmittance : null }, tMulti: { value: this.atmoLut ? this.atmoLut.multi : null }, uMsScale: { value: 1 },
         },
         vertexShader: atmoVert, fragmentShader: atmoFrag, transparent: true, depthWrite: false, side: THREE.DoubleSide,
         blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
