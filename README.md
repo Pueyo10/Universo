@@ -130,6 +130,10 @@ render scale, chunk generation).
   textures stay resident. This budget does not include local 8K maps or render targets.
 - Cloud decks fade out below ~0.25 radii so the surface can be explored; the ocean glint
   is damped from low orbit.
+- **Real spacecraft**: ISS, Hubble, JWST, Voyager, New Horizons and Pioneer are the NASA 3D models, cleaned
+  in headless Blender (baked transforms, helper parts removed, real sizes, PBR materials) and compressed
+  with meshopt + WebP; loaded lazily when you approach, lit by the Sun and by an earthshine environment
+  in low orbit.
 - **Real sky**: the Milky Way band, bulge, dust lanes and Magellanic Clouds come from the Gaia-based
   NASA SVS star map (view from the Sun; it fades out beyond ~2,000 ly where the 3D galaxy takes over).
 - **Real relief**: close-up tiles are displaced by real elevation data (AWS Terrarium / SRTM for Earth,
@@ -252,6 +256,8 @@ Planet maps © [Solar System Scope](https://www.solarsystemscope.com/textures/)
 (CC BY 4.0). Close-up surface tiles: NASA GIBS (Blue Marble Next Generation, VIIRS)
 and NASA Trek (LRO WAC, Viking MDIM 2.1, MESSENGER MDIS).
 Elevation: AWS Terrarium tiles (SRTM/GMTED/ETOPO, Mapzen), LRO LOLA and MGS MOLA DEMs (NASA Trek).
+Spacecraft models: NASA 3D Resources (science.nasa.gov and github.com/nasa/NASA-3D-Resources), processed
+with Blender and glTF-Transform (tools/blender/prep_model.py, tools/models.mjs). NASA does not endorse this project.
 The sky background is the NASA SVS *Deep Star Maps 2020* (Gaia DR2 + Hipparcos, public domain),
 log-encoded to a 4K galactic-coordinate texture; the catalogue stars are drawn on top of it. Everything else — galaxy, stars, nebulae, moons, Pluto, rings,
 exoplanets, the black hole — is generated procedurally at runtime from seeds.

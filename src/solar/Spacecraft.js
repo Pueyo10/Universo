@@ -131,7 +131,7 @@ export class Spacecraft extends Body {
       const off = sunEarth.multiplyScalar(d.l2DistKm * KM).add(halo);
       const offVisual = off.clone().multiplyScalar(earth.radius / earth.realRadius * 0.08);
       this.position.copy(earth.position).add(off.lerp(offVisual, scaleT));
-      this.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), this.position.clone().negate().normalize()); // hot side (bus + sunshield, -Y) faces the Sun; mirror stays in the shade
+      this.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), this.position.clone().negate().normalize()); // model -Y = bus + sunshield (hot side) toward the Sun; the gold mirror (+Y) stays in the shade
     } else if (d.altitudeKm) {
       // circular orbit in Earth's equatorial frame
       const pole = earth.pole;
@@ -171,7 +171,7 @@ Spacecraft.prototype._realModel = function () {
       if (!scene) { this._modelState = 'none'; return; }
       const root = scene.clone(true);
       const env = getEnvironment(eng.renderer, this.def.parent === 'earth' && !this.def.l2 ? 'earth' : 'space');
-      this._mats = dressModel(root, env, this.def.parent === 'earth' && !this.def.l2 ? 1.0 : 0.6);
+      this._mats = dressModel(root, env, this.def.parent === 'earth' && !this.def.l2 ? 1.0 : 1.4);
       const metresPerRadius = this.radiusKm * 1000;
       root.scale.setScalar(1 / metresPerRadius);
       if (this.def.modelRot) root.rotation.set(...this.def.modelRot.map(d => d * DEG));
