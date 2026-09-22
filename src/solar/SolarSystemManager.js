@@ -5,13 +5,13 @@ import { SUN, PLANETS, DWARF_PLANETS, MOONS } from '../data/SolarSystemData.js';
 import { Body, VISUAL } from './Body.js';
 import { StarBody } from './Sun.js';
 import { PlanetRenderer } from './Planet.js';
-import { Rings } from './Rings.js';
+import { Rings, ringDustTexture } from './Rings.js';
 import { SkyContrast } from './SkyContrast.js';
 import { Belts } from './Belts.js';
 import { buildComets } from './Comets.js';
 import { buildSpacecraft } from './Spacecraft.js';
 import { OrbitLines, Markers } from './OrbitLines.js';
-import { generateSurfaceAsync, generateRingTexture, normalFromImage } from './TextureFactory.js';
+import { generateSurfaceAsync, generateRingTexture, normalFromImage, loadRingProfile } from './TextureFactory.js';
 import { ExoSystemManager } from './ExoSystem.js';
 import { SurfaceSites } from './SurfaceSites.js';
 import { HabitableZoneLayer } from './HabitableZone.js';
@@ -57,7 +57,14 @@ export class SolarSystemManager {
     this.orbits = new OrbitLines(this);
     this.markers = new Markers(this);
     this.markers.add(sun);
-    this.ringTextures = { saturn: generateRingTexture('saturn', 2048), uranus: generateRingTexture('uranus', 1024), neptune: generateRingTexture('neptune', 1024) };
+    // Saturn: measured Cassini UVIS optical depth (tools/rings_profile.py); procedural fallback over the same radii
+    const satRings = PLANETS.find(d => d.id === 'saturn').rings;
+    const satKm = PLANETS.find(d => d.id === 'saturn').radiusKm;
+    const profile = await loadRingProfile(satRings.profile);
+    if (profile && (Math.abs(profile.innerKm / satKm - satRings.inner) > 1e-4 || Math.abs(profile.outerKm / satKm - satRings.outer) > 1e-4)) console.warn('Saturn ring profile range does not match SolarSystemData rings.inner/outer');
+    this.ringTextures = { saturn: profile?.tex || generateRingTexture('saturn', 2048, [satRings.inner * satKm, satRings.outer * satKm]), uranus: generateRingTexture('uranus', 1024), neptune: generateRingTexture('neptune', 1024) };
+    // share of optical depth in forward-scattering dust (Uranus' rings are dust-poor, Neptune's dusty)
+    this.ringDust = { saturn: profile?.aux || ringDustTexture(0.05), uranus: ringDustTexture(0.05), neptune: ringDustTexture(0.5) };
     const defs = [...PLANETS, ...DWARF_PLANETS];
     // kick off every procedural surface in the worker pool now; the build loop below awaits them in order
     for (const def of [...defs, ...MOONS]) {
@@ -126,7 +133,7 @@ export class SolarSystemManager {
     }
     const ringTex = def.rings ? this.ringTextures[def.id] : null;
     body.renderer = new PlanetRenderer(body, { map, night, cloud, normal, spec, emissive }, { ringTex, normalScale: def.normalTexture ? 0.9 : (def.fakeNormal ? 0.7 : 1.0) });
-    if (def.rings) body.rings = new Rings(body, ringTex, { maxRocks: this.engine.q.ringParticles });
+    if (def.rings) body.rings = new Rings(body, ringTex, { maxRocks: this.engine.q.ringParticles, dust: this.ringDust[def.id] });
     this._register(body, def);
     this.markers.add(body);
     if (body.elements || (parent && def.a)) this.orbits.add(body, { segments: parent ? 128 : 360 });

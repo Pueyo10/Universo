@@ -92,9 +92,71 @@ export function normalFromImage(image, strength = 2.0, size = 1024) {
   return t;
 }
 
-/** Saturn-like ring radial profile as a 1D texture (RGBA: colour + alpha) with named gaps. */
-export function generateRingTexture(kind = 'saturn', width = 2048) {
-  const data = generateRingData(kind, width);
+/**
+ * Measured ring profile written by tools/rings_profile.py (Cassini UVIS occultations).
+ * Returns { tex, aux, innerKm, outerKm } or null when unavailable:
+ *  - tex: N×1 half-float RGBA, rgb = particle single-scattering albedo (linear),
+ *    a = normal-incidence opacity 1 − e^(−τ) — the same semantics as the procedural
+ *    rings, so the planet's ring shadow and the boulder field read it unchanged.
+ *    Mipmaps are built here by averaging transmission (not τ), which is the
+ *    correct face-on average of unresolved gaps and ringlets.
+ *  - aux: N×1 RGBA8, r = dust fraction (share of τ in forward-scattering µm grains).
+ *  tex.userData.opacity keeps a Float32Array copy for CPU lookups.
+ */
+export async function loadRingProfile(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${res.status} ${url}`);
+    const buf = await res.arrayBuffer();
+    const dv = new DataView(buf);
+    if (dv.getUint32(0, false) !== 0x53524e47) throw new Error('not a ring profile'); // 'SRNG'
+    const n = dv.getUint32(8, true), innerKm = dv.getFloat32(12, true), outerKm = dv.getFloat32(16, true);
+    const op16 = new Uint16Array(buf, 32, n), meta = new Uint8Array(buf, 32 + n * 2, n * 4);
+    // level 0 in float, then box-filtered levels down to 1 texel
+    let op = new Float32Array(n), col = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { op[i] = op16[i] / 65535; for (let k = 0; k < 3; k++) col[i * 3 + k] = meta[i * 4 + k] / 255; }
+    const opacity = op;
+    const toHalf = THREE.DataUtils.toHalfFloat;
+    const mipmaps = [];
+    for (let w = n; ; ) {
+      const data = new Uint16Array(w * 4);
+      for (let i = 0; i < w; i++) {
+        data[i * 4] = toHalf(col[i * 3]); data[i * 4 + 1] = toHalf(col[i * 3 + 1]); data[i * 4 + 2] = toHalf(col[i * 3 + 2]); data[i * 4 + 3] = toHalf(op[i]);
+      }
+      mipmaps.push({ data, width: w, height: 1 });
+      if (w === 1) break;
+      const h = w >> 1, nop = new Float32Array(h), ncol = new Float32Array(h * 3);
+      for (let i = 0; i < h; i++) {
+        const a = op[2 * i], b = op[2 * i + 1], wa = a + 1e-4, wb = b + 1e-4;
+        nop[i] = (a + b) / 2;   // mean opacity = 1 − mean transmission
+        for (let k = 0; k < 3; k++) ncol[i * 3 + k] = (col[6 * i + k] * wa + col[6 * i + 3 + k] * wb) / (wa + wb);
+      }
+      op = nop; col = ncol; w = h;
+    }
+    const tex = new THREE.DataTexture(mipmaps[0].data, n, 1, THREE.RGBAFormat, THREE.HalfFloatType);
+    tex.mipmaps = mipmaps; tex.generateMipmaps = false;
+    tex.colorSpace = THREE.NoColorSpace; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping; tex.needsUpdate = true;
+    tex.userData.opacity = opacity;
+    const auxData = new Uint8Array(n * 4);
+    for (let i = 0; i < n; i++) auxData[i * 4] = meta[i * 4 + 3];
+    const aux = new THREE.DataTexture(auxData, n, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+    aux.colorSpace = THREE.NoColorSpace; aux.minFilter = THREE.LinearMipmapLinearFilter; aux.magFilter = THREE.LinearFilter;
+    aux.generateMipmaps = true; aux.wrapS = aux.wrapT = THREE.ClampToEdgeWrapping; aux.needsUpdate = true;
+    return { tex, aux, innerKm, outerKm };
+  } catch (e) {
+    console.warn('Ring profile unavailable, using the procedural rings:', e.message);
+    return null;
+  }
+}
+
+/**
+ * Saturn-like ring radial profile as a 1D texture (RGBA: colour + alpha) with named gaps.
+ * rangeKm = [inner, outer] maps the texture onto those radii (Saturn fallback for the
+ * measured profile); by default it spans the C ring inner edge to the A ring outer edge.
+ */
+export function generateRingTexture(kind = 'saturn', width = 2048, rangeKm = null) {
+  const data = generateRingData(kind, width, rangeKm);
   const tex = new THREE.DataTexture(data, width, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
   tex.colorSpace = THREE.NoColorSpace; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter; tex.wrapS = THREE.ClampToEdgeWrapping; tex.needsUpdate = true;
   return tex;

@@ -259,7 +259,11 @@ Elevation: AWS Terrarium tiles (SRTM/GMTED/ETOPO, Mapzen), LRO LOLA and MGS MOLA
 Spacecraft models: NASA 3D Resources (science.nasa.gov and github.com/nasa/NASA-3D-Resources), processed
 with Blender and glTF-Transform (tools/blender/prep_model.py, tools/models.mjs). NASA does not endorse this project.
 The sky background is the NASA SVS *Deep Star Maps 2020* (Gaia DR2 + Hipparcos, public domain),
-log-encoded to a 4K galactic-coordinate texture; the catalogue stars are drawn on top of it. Everything else — galaxy, stars, nebulae, moons, Pluto, rings,
+log-encoded to a 4K galactic-coordinate texture; the catalogue stars are drawn on top of it.
+Saturn's rings use the normal optical depth measured by Cassini UVIS stellar occultations
+(Colwell et al. 2010, NASA PDS Ring-Moon Systems Node, volume COUVIS_8001, public domain):
+seven β Centauri / α Crucis profiles median-combined by `tools/rings_profile.py`; particle
+colour and dust content follow Voyager/Cassini photometry. Everything else — galaxy, stars, nebulae, moons, Pluto, Uranus' and Neptune's rings,
 exoplanets, the black hole — is generated procedurally at runtime from seeds.
 Orbital elements after Standish (JPL), rotation elements after the IAU WGCCRE
 reports, star data from the Hipparcos / Yale catalogues.

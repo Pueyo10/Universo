@@ -1,8 +1,21 @@
 // Alpha stores normal-incidence opacity. The same optical depth drives the
 // viewed ring and its shadow on the planet (Beer-Lambert extinction).
 export const RING_OPTICS = /* glsl */`
+  // The opaque B ring core reaches tau ~ 5-6 (Cassini UVIS); keep that range.
   float ringOpticalDepth(float opacity) {
-    return -log(max(1.0 - clamp(opacity, 0.0, 0.995), 0.005));
+    return -log(max(1.0 - clamp(opacity, 0.0, 0.9975), 0.0025));
+  }
+  // Phase functions normalised to 4 pi, as functions of cos(phase angle) =
+  // dot(to-sun, to-viewer). Centimetre-to-metre ice particles scatter like
+  // rough Lambert spheres (strongly backwards, nothing at full forward) with a
+  // narrow opposition surge; micron dust diffracts light forwards (two-term HG).
+  float ringPhaseParticles(float cosA) {
+    float a = acos(clamp(cosA, -1.0, 1.0));
+    return 0.8488 * (sqrt(max(1.0 - cosA * cosA, 0.0)) + (3.14159265 - a) * cosA) * (1.0 + 0.5 * exp(-a * 25.0));
+  }
+  float ringHG(float g, float c) { return (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * c, 1.5); }
+  float ringPhaseDust(float cosA) {
+    return 0.93 * ringHG(0.75, -cosA) + 0.07 * ringHG(-0.3, -cosA);
   }
   float ringTransmission(float tau, float mu) {
     return exp(-min(tau / max(abs(mu), 0.015), 80.0));
