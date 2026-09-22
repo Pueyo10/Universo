@@ -73,7 +73,7 @@ export class Engine {
 
     this.scene = new THREE.Scene();
     this.scene.background = null;
-    this.camera = new THREE.PerspectiveCamera(this.settings.fov, window.innerWidth / window.innerHeight, 1e-4, 1e19);
+    this.camera = new THREE.PerspectiveCamera(this.settings.fov, window.innerWidth / window.innerHeight, 1e-7, 1e19);   // near 10 cm: log depth makes near/far precision-free, and spacecraft are metres across
     this.camera.matrixAutoUpdate = true;
 
     // ------ volumetric (nebula) layer: rendered at reduced resolution into its own

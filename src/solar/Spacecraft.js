@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import { AU, KM, DEG, radecToVector, daysSinceJ2000 } from '../core/Units.js';
 import { SPACECRAFT } from '../data/SolarSystemData.js';
 import { Body, VISUAL } from './Body.js';
+import { loadSpacecraftModel, getEnvironment, dressModel } from './SpacecraftModels.js';
+
+// Real models (public/models/*.glb), keyed by def.model. Longest dimension in metres is baked into each file.
+export const MODEL_FILES = { voyager: 'voyager.glb', pioneer: 'pioneer.glb', newhorizons: 'newhorizons.glb', iss: 'iss.glb', hubble: 'hubble.glb', jwst: 'jwst.glb' };
 
 // Procedural spacecraft models (Voyager, Pioneer, New Horizons, ISS, Hubble,
 // JWST) at plausible current positions: deep-space probes drift outward along
@@ -97,6 +101,7 @@ export class Spacecraft extends Body {
     const metresPerRadius = this.radiusKm * 1000;
     this.model.scale.setScalar(1 / metresPerRadius);
     this.group.add(this.model);
+    this.modelFile = MODEL_FILES[def.model] || null; this._modelState = this.modelFile ? 'idle' : 'none';
     this.epoch = Date.UTC(2026, 6, 1);
     const d = def;
     if (d.parent === 'earth' && !d.l2) {
@@ -126,7 +131,7 @@ export class Spacecraft extends Body {
       const off = sunEarth.multiplyScalar(d.l2DistKm * KM).add(halo);
       const offVisual = off.clone().multiplyScalar(earth.radius / earth.realRadius * 0.08);
       this.position.copy(earth.position).add(off.lerp(offVisual, scaleT));
-      this.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), this.position.clone().normalize()); // sunshield faces the Sun
+      this.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), this.position.clone().negate().normalize()); // hot side (bus + sunshield, -Y) faces the Sun; mirror stays in the shade
     } else if (d.altitudeKm) {
       // circular orbit in Earth's equatorial frame
       const pole = earth.pole;
@@ -147,11 +152,44 @@ export class Spacecraft extends Body {
       this.quaternion.setFromRotationMatrix(m);
     }
     this.radius = this.realRadius * (1 + scaleT * (VISUAL.smallRadius - 1));
-    this.trackVelocity(simMs);
+    this._realModel();
+    if (!this.deferVelocity) this.trackVelocity(simMs);
     this.group.position.copy(this.position); this.group.quaternion.copy(this.quaternion); this.group.scale.setScalar(this.radius);
     this.group.updateMatrix(); this.group.matrixWorld.copy(this.group.matrix);
   }
 }
+
+Spacecraft.prototype._realModel = function () {
+  if (this._modelState === 'none') return;
+  const eng = this.manager && this.manager.engine; if (!eng) return;
+  const cam = eng.camera.position;
+  const dist = this._v0 ? this._v0.copy(this.position).sub(cam).length() : (this._v0 = new THREE.Vector3()).copy(this.position).sub(cam).length();
+  // fetch once the craft could cover more than a few pixels (or is being looked at up close)
+  if (this._modelState === 'idle' && dist < this.radius * 4000) {
+    this._modelState = 'loading';
+    loadSpacecraftModel(this.modelFile).then(scene => {
+      if (!scene) { this._modelState = 'none'; return; }
+      const root = scene.clone(true);
+      const env = getEnvironment(eng.renderer, this.def.parent === 'earth' && !this.def.l2 ? 'earth' : 'space');
+      this._mats = dressModel(root, env, this.def.parent === 'earth' && !this.def.l2 ? 1.0 : 0.6);
+      const metresPerRadius = this.radiusKm * 1000;
+      root.scale.setScalar(1 / metresPerRadius);
+      if (this.def.modelRot) root.rotation.set(...this.def.modelRot.map(d => d * DEG));
+      this.group.remove(this.model); this.model = root; this.group.add(root);
+      this._modelState = 'ready';
+    });
+  }
+  // keep the environment's "down" pointing at the planet (earthshine from the right side)
+  if (this._modelState === 'ready' && this._mats && this.parent && this.def.parent === 'earth' && !this.def.l2) {
+    const e = this._envEuler || (this._envEuler = new THREE.Euler());
+    const q = this._envQ || (this._envQ = new THREE.Quaternion());
+    const nadir = this._v1 || (this._v1 = new THREE.Vector3());
+    nadir.copy(this.parent.position).sub(this.position).normalize();
+    q.setFromUnitVectors(nadir, new THREE.Vector3(0, -1, 0));
+    e.setFromQuaternion(q);
+    for (const m of this._mats) if (m.envMapRotation) m.envMapRotation.copy(e);
+  }
+};
 
 export function buildSpacecraft(manager, bodiesById) {
   return SPACECRAFT.map(def => new Spacecraft(def, manager, def.parent ? bodiesById[def.parent] : null));

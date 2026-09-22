@@ -254,6 +254,8 @@ export class SolarSystemManager {
       // velocity must be measured on the shifted positions only (a pre-shift sample would read the shift itself as ~300 units/s)
       b.deferVelocity = true; b.position.add(shift); b.trackVelocity(simMs); b.syncGroup();
       for (const m of b.children) { if (m.kind !== 'moon' || !m.def) continue; m.deferVelocity = true; m.position.add(shift); m.trackVelocity(simMs); m.syncGroup(); }
+      // spacecraft placed relative to this planet (ISS, Hubble, JWST at L2) were positioned from the unshifted centre
+      if (this.spacecraft) for (const c of this.spacecraft) { if (c.parent !== b) continue; c.deferVelocity = true; c.position.add(shift); c.trackVelocity(simMs); c.group.position.copy(c.position); c.group.updateMatrix(); c.group.matrixWorld.copy(c.group.matrix); c._realModel(); }
     }
   }
 
