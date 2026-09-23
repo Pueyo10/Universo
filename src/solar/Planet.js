@@ -34,6 +34,7 @@ const surfFrag = /* glsl */`
   varying vec3 vN; varying vec3 vPos; varying vec2 vUv; varying vec3 vView;
   uniform sampler2D uMap, uNightMap, uSpecMap, uNormalMap, uCloudMap, uRingTex, uEmissiveMap;
   uniform float uHasNight, uHasSpec, uHasNormal, uHasCloud, uHasRing, uHasEmissive, uNormalScale;
+  uniform float uLunar;          // 1: lunar-Lambert photometry (airless regolith), 0: Lambert
   uniform vec3 uSunDir;          // local space
   uniform vec3 uCamLocal;        // local space
   uniform mat3 uLocalToView;     // for view-space normal (unused)
@@ -129,7 +130,16 @@ const surfFrag = /* glsl */`
     }
     #endif
     float ndlRaw = dot(N, L);
-    float ndl = max(dot(Nn, L), 0.0) * terrShadow;
+    float mu0 = max(dot(Nn, L), 0.0), lit = mu0;
+    if (uLunar > 0.5) {
+      // McEwen (1991) lunar-Lambert: a regolith is Lommel-Seeliger-like at low phase (no limb darkening: the full Moon is a
+      // flat disc and relief vanishes) and turns Lambertian at high phase. L(alpha) fitted to lunar photometry.
+      float mu = max(dot(Nn, V), 0.0);
+      float ph = degrees(acos(clamp(dot(L, V), -1.0, 1.0)));
+      float lw = clamp(1.0 + ph * (-0.019 + ph * (2.42e-4 - ph * 1.46e-6)), 0.0, 1.0);
+      lit = mix(mu0, min(2.0 * mu0 / (mu0 + mu + 1e-4), 1.6), lw);
+    }
+    float ndl = lit * terrShadow;
     // soft terminator (atmospheric twilight widens it)
     float day = uNoTerminator > 0.5 ? 1.0 : smoothstep(-0.03 - uAtmoStrength * 0.08, 0.10, ndlRaw);
     vec3 albedo = srgb2lin(texture2D(uMap, (uv - uTileUV.xy) * uTileUV.zw).rgb) * uTint;
@@ -145,10 +155,10 @@ const surfFrag = /* glsl */`
       float baseLod = log2(max(uBaseTexels / 8.0, 1.0));
       vec3 lowBase = srgb2lin(textureLod(uBaseMap, uv, baseLod).rgb) * uTint;
       vec3 lowTile = srgb2lin(textureLod(uMap, tileUv, tileLod).rgb) * uTint;
-      albedo *= clamp(lowBase / max(lowTile, vec3(0.004)), vec3(0.35), vec3(3.0));
+      albedo *= clamp(lowBase / max(lowTile, vec3(0.004)), vec3(0.2), vec3(8.0));   // the Trek WAC mosaic is ~3-5x darker than the LROC colour base
       if (uParentUV.z > 1.0) {
         vec3 lowParent = srgb2lin(textureLod(uParentMap, parentUv, tileLod).rgb) * uTint;
-        parentAlbedo *= clamp(lowBase / max(lowParent, vec3(0.004)), vec3(0.35), vec3(3.0));
+        parentAlbedo *= clamp(lowBase / max(lowParent, vec3(0.004)), vec3(0.2), vec3(8.0));
       }
     }
     albedo = mix(parentAlbedo, albedo, smoothstep(0.0, 1.0, uTileFade));
@@ -437,7 +447,7 @@ export class PlanetRenderer {
     const u = {
       uMap: { value: tex.map }, uNightMap: { value: tex.night || tex.map }, uSpecMap: { value: tex.spec || tex.map }, uNormalMap: { value: tex.normal || tex.map }, uCloudMap: { value: tex.cloud || tex.map }, uRingTex: { value: opts.ringTex || tex.map }, uEmissiveMap: { value: tex.emissive || tex.map },
       uHasNight: { value: tex.night ? 1 : 0 }, uHasSpec: { value: tex.spec ? 1 : 0 }, uHasNormal: { value: tex.normal ? 1 : 0 }, uHasCloud: { value: tex.cloud && !atmo?.thick ? 1 : 0 }, uHasRing: { value: opts.ringTex ? 1 : 0 }, uHasEmissive: { value: tex.emissive ? 1 : 0 },
-      uNormalScale: { value: opts.normalScale ?? 1.0 },
+      uNormalScale: { value: opts.normalScale ?? 1.0 }, uLunar: { value: def.photometry === 'lunar' ? 1 : 0 },
       uSunDir: { value: new THREE.Vector3(1, 0, 0) }, uCamLocal: { value: new THREE.Vector3(0, 0, 5) }, uLocalToView: { value: new THREE.Matrix3() },
       uAtmoColor: { value: new THREE.Vector3(...(atmo?.color || [0.5, 0.6, 1.0])) }, uAtmoStrength: { value: atmo ? Math.min(atmo.density, 1.2) : 0 },
       uTime: { value: 0 }, uCloudOffset: { value: 0 }, uSunAngular: { value: 0.0046 }, uGas: { value: def.type === 'gas' || def.type === 'ice' ? 1 : 0 }, uBands: { value: def.id === 'jupiter' ? 1.0 : def.id === 'saturn' ? 0.6 : 0.3 }, uSpotStrength: { value: def.id === 'jupiter' ? 1.0 : 0 },
@@ -501,15 +511,18 @@ export class PlanetRenderer {
     if (rpx > 260) {
       this._hiFarSince = 0;
       if (!this._hi) { this._hi = {}; for (const k of Object.keys(spec)) loadHiRes(spec[k], eng.renderer).then(tex => { if (this._hi) this._hi[k] = tex; }); }
+      if (this._hiOn && this._hi.normal && u.uNormalMap.value !== this._hi.normal) u.uNormalMap.value = this._hi.normal;   // may arrive after the map
       if (!this._hiOn && this._hi.map) {
         this._hiOn = true;
         u.uMap.value = this._hi.map;
+        if (this._hi.normal) u.uNormalMap.value = this._hi.normal;
         if (this._hi.night) u.uNightMap.value = this._hi.night;
         if (this._hi.cloud) { u.uCloudMap.value = this._hi.cloud; if (this.cloudMat) this.cloudMat.uniforms.uMap.value = this._hi.cloud; }
       }
     } else if (this._hiOn && rpx < 120) {
       this._hiOn = false;
       u.uMap.value = this.tex.map; u.uNightMap.value = this.tex.night || this.tex.map;
+      if (this._hi.normal) u.uNormalMap.value = this.tex.normal || this.tex.map;
       if (this._hi.cloud) { u.uCloudMap.value = this.tex.cloud || this.tex.map; if (this.cloudMat) this.cloudMat.uniforms.uMap.value = this.tex.cloud; }
       this._hiFarSince = performance.now();
     } else if (!this._hiOn && this._hi && this._hiFarSince && performance.now() - this._hiFarSince > 90000) {

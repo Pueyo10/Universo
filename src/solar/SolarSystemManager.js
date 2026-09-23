@@ -125,7 +125,7 @@ export class SolarSystemManager {
       map = tex.map; normal = tex.normalMap;
     }
     const ringTex = def.rings ? this.ringTextures[def.id] : null;
-    body.renderer = new PlanetRenderer(body, { map, night, cloud, normal, spec, emissive }, { ringTex, normalScale: def.normalTexture ? 0.9 : (def.fakeNormal ? 0.7 : 1.0) });
+    body.renderer = new PlanetRenderer(body, { map, night, cloud, normal, spec, emissive }, { ringTex, normalScale: def.normalScale ?? (def.normalTexture ? 0.9 : (def.fakeNormal ? 0.7 : 1.0)) });
     if (def.rings) body.rings = new Rings(body, ringTex, { maxRocks: this.engine.q.ringParticles });
     this._register(body, def);
     this.markers.add(body);

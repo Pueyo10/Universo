@@ -89,7 +89,7 @@ export const PLANETS = [
   },
   {
     id: 'mars', name: 'Mars', kind: 'planet', color: '#e0805a', radiusKm: 3389.5, massKg: 6.4171e23, elements: 'mars', rotation: 'mars',
-    texture: T('2k_mars.jpg'), type: 'rocky', fakeNormal: 2.2,
+    texture: T('2k_mars.jpg'), normalTexture: T('2k_mars_normal.jpg'), normalScale: 1.0, type: 'rocky',
     atmosphere: { color: [0.9, 0.6, 0.4], height: 0.025, density: 0.12, mie: 0.9, rayleigh: [0.7, 0.45, 0.3], dust: true },
     subtitle: 'Fourth planet · the Red Planet',
     data: { type: 'Terrestrial planet', radius: '3,389.5 km (0.53 × Earth)', mass: '6.42 × 10²³ kg', semiMajorAxis: '1.524 AU (227.9 million km)', orbitalPeriod: '687 days', rotationPeriod: '24 h 37 m', gravity: '3.72 m/s²', meanTemp: '−63 °C', surfacePressure: '0.006 bar', axialTilt: '25.19°', moons: '2 (Phobos, Deimos)', atmosphere: '95% CO₂ · 2.8% N₂ · 2% Ar' },
@@ -208,7 +208,7 @@ export const DWARF_PLANETS = [
 // Moons: a = semi-major axis (km), P = period (days), i = inclination (deg) relative to parent's equator
 // (frame: 'ecliptic' for the Moon), retro = retrograde, r = mean radius (km)
 export const MOONS = [
-  { id: 'moon', name: 'Moon', parent: 'earth', aliases: ['Luna', 'The Moon'], color: '#c9c7c2', r: 1737.4, massKg: 7.342e22, a: 384400, P: 27.321661, i: 5.145, frame: 'ecliptic', phase0: 134.96, texture: T('2k_moon.jpg'), fakeNormal: 2.4, rotation: 'moon',
+  { id: 'moon', name: 'Moon', parent: 'earth', aliases: ['Luna', 'The Moon'], color: '#c9c7c2', r: 1737.4, massKg: 7.342e22, a: 384400, P: 27.321661, i: 5.145, frame: 'ecliptic', phase0: 134.96, texture: T('2k_moon.jpg'), normalTexture: T('2k_moon_normal.jpg'), normalScale: 1.0, photometry: 'lunar', rotation: 'moon',
     subtitle: 'Earth\'s only natural satellite',
     data: { type: 'Natural satellite', radius: '1,737 km (0.27 × Earth)', mass: '7.35 × 10²² kg', semiMajorAxis: '384,400 km', orbitalPeriod: '27.32 days', rotationPeriod: '27.32 days (tidally locked)', gravity: '1.62 m/s²', meanTemp: '−20 °C (mean) · −173 to 127 °C', age: '4.51 billion years' },
     description: 'Born from a giant impact between the young Earth and a Mars-sized body, the Moon is the fifth-largest satellite in the Solar System and the only other world humans have walked on. Its dark maria are ancient basalt floods; the bright highlands are older, cratered crust. Its gravity drives Earth\'s tides and steadies our axial tilt.',
