@@ -1,0 +1,126 @@
+{
+ "name": "Orion Nebula (M42/M43)",
+ "frame": "x=East y=North z=away from Earth, light-years, theta1 Ori C at origin",
+ "dims": [
+  176,
+  176,
+  96
+ ],
+ "warp": {
+  "x": [
+   0.0,
+   12.0,
+   1.8
+  ],
+  "y": [
+   0.0,
+   12.0,
+   1.8
+  ],
+  "z": [
+   -0.6000000000000001,
+   6.6,
+   1.2
+  ]
+ },
+ "encoding": {
+  "emission": "log10, 4.5 decades",
+  "dust": "sqrt"
+ },
+ "dec": 4.5,
+ "scales": {
+  "ha": 0.08602333068847656,
+  "o3": 0.0696134939789772,
+  "low": 0.03131360933184624,
+  "scat": 0.12668992578983307,
+  "dust": 26.632244873046876
+ },
+ "albedo": 0.6,
+ "envelope": 0.97,
+ "render": {
+  "gain": 0.1,
+  "gamma": 0.62,
+  "chanGain": [
+   0.85,
+   2.0,
+   1.5,
+   1.9
+  ],
+  "detail": 0.9,
+  "detailTile": 1.4
+ },
+ "layout": [
+  {
+   "name": "emission",
+   "format": "RGBA",
+   "bytes": 11894784
+  },
+  {
+   "name": "dust",
+   "format": "R",
+   "bytes": 2973696
+  },
+  {
+   "name": "detail",
+   "format": "RG",
+   "dims": [
+    64,
+    64,
+    64
+   ],
+   "bytes": 524288
+  }
+ ],
+ "stars": [
+  {
+   "name": "theta1 Ori C (Trapezium)",
+   "p": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "Q": 1.0,
+   "L": 1.4
+  },
+  {
+   "name": "theta2 Ori A",
+   "p": [
+    0.63,
+    -0.62,
+    -1.3
+   ],
+   "Q": 0.1,
+   "L": 0.35
+  },
+  {
+   "name": "NU Ori (M43)",
+   "p": [
+    1.45,
+    2.87,
+    -0.1
+   ],
+   "Q": 0.05,
+   "L": 0.25
+  },
+  {
+   "name": "42 Ori (NGC 1977)",
+   "p": [
+    -0.4,
+    12.6,
+    -1.6
+   ],
+   "Q": 0.05,
+   "L": 0.2
+  },
+  {
+   "name": "iota Ori",
+   "p": [
+    0.6,
+    -14.0,
+    -2.6
+   ],
+   "Q": 0.1,
+   "L": 0.5
+  }
+ ]
+}

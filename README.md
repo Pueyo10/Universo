@@ -209,7 +209,15 @@ Rendering checks, performance acceptance route and current limitations:
 * **Nebulae.** 20 real nebulae at their true positions plus ~60 procedural
   ones, each ray-marched as a volume with type-specific shaping (emission
   clouds with ionisation gradients and dust, planetary shells, supernova
-  filaments, reflection nebulae).
+  filaments, reflection nebulae). The **Orion Nebula** (M42/M43) is a baked
+  3D volume (`public/volumes/orion_m42.*`, 5 MB): a physically motivated model
+  of the blister HII region — OMC-1 cloud face carved behind the Trapezium,
+  Bright Bar, Dark Bay, the foreground Veil — lit by photon-conserving ionising
+  radiative transfer from θ¹ Ori C, θ² Ori A, NU Ori, 42 Ori and ι Ori, with
+  H-alpha, [OIII], [NII]+[SII] and dust-scattered starlight channels plus
+  reddening extinction. It is sky-aligned, so from Earth it looks like the
+  classic images, and can be explored in 3D. Regenerate with
+  `python tools/nebula/bake_orion.py [--preview DIR]` (numpy only).
 * **Beyond.** Andromeda, Triangulum, the Magellanic Clouds, Centaurus A, M81,
   M82, the Whirlpool, Pinwheel, Sombrero and M87 at their real positions and
   orientations, and thousands of procedural galaxies along cosmic-web
@@ -242,7 +250,8 @@ src/
                ExposurePass (eye adaptation), BlackHolePass (geodesic lensing)
   workers/     chunkWorker (procedural star cells), textureWorker (planet surfaces)
   universe/    UniverseManager, GalaxyModel/Manager, StarFieldManager (LOD chunks),
-               NebulaManager, BlackHole, DistantGalaxies, Constellations, Grids, BackgroundSky
+               NebulaManager (+ NebulaVolume: baked 3D-texture nebulae), BlackHole, DistantGalaxies,
+               Constellations, Grids, BackgroundSky
   solar/       SolarSystemManager, Body (orbits & IAU rotation), Sun, Planet, Rings,
                TileGlobe (streamed NASA surface tiles for close-ups),
                Belts, Comets, Spacecraft, OrbitLines/Markers, ExoSystem,
@@ -273,5 +282,9 @@ Saturn's rings use the normal optical depth measured by Cassini UVIS stellar occ
 seven β Centauri / α Crucis profiles median-combined by `tools/rings_profile.py`; particle
 colour and dust content follow Voyager/Cassini photometry. Everything else — galaxy, stars, nebulae, moons, Pluto, Uranus' and Neptune's rings,
 exoplanets, the black hole — is generated procedurally at runtime from seeds.
+The Orion Nebula volume is a model, not an observation: its geometry follows the published 3D
+structure of M42 (O'Dell 2001, ARA&A 39, 99; Wen & O'Dell 1995; O'Dell et al. 2009 on the Veil;
+Pabst et al. 2019, Nature 565, 618 on the Veil bubble), star positions from SIMBAD (J2000),
+and its look was compared against the NASA/ESA Hubble (2006) and ESO WFI mosaics.
 Orbital elements after Standish (JPL), rotation elements after the IAU WGCCRE
 reports, star data from the Hipparcos / Yale catalogues.
