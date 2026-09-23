@@ -5,13 +5,15 @@ import { sampleArmSprites } from './GalaxyModel.js';
 import { LOGDEPTH_PARS_VERT, LOGDEPTH_VERT, LOGDEPTH_PARS_FRAG, LOGDEPTH_FRAG, HASH, VALUE_NOISE3D } from '../shaders/chunks.js';
 import { nearStarVert, nearStarFrag } from '../shaders/starShader.js';
 import { i18n } from '../i18n/index.js';
+import { loadNebulaVolume, updateVolumeUniforms, skyFrame, ORION_STARS } from './NebulaVolume.js';
 
 // Volumetric nebulae: each is a ray-marched sphere of procedural density with
 // type-specific shaping — emission clouds with ionisation gradients and dust,
 // planetary shells, supernova-remnant filaments, blue reflection nebulae.
 // Named nebulae sit at their real positions; more are scattered along the arms.
+// Entries with `volume` swap to a baked 3D-texture volume (NebulaVolume.js) once it has loaded.
 const CATALOG = [
-  { name: 'Orion Nebula', aliases: ['M42', 'NGC 1976'], ra: 83.82, dec: -5.39, dist: 1344, size: 24, type: 0, seed: 1, bright: 1.2, stars: 6, desc: 'The closest region of massive star formation, a glowing cloud 24 light-years across lit by the four hot stars of the Trapezium. Visible to the naked eye as the middle "star" of Orion\'s sword, it is a stellar nursery of some 700 young stars and protoplanetary discs.' },
+  { name: 'Orion Nebula', aliases: ['M42', 'NGC 1976'], ra: 83.82, dec: -5.39, dist: 1344, size: 24, type: 0, seed: 1, bright: 1.2, stars: 6, volume: 'orion_m42', volStars: ORION_STARS, desc: 'The closest region of massive star formation, a glowing cloud 24 light-years across lit by the four hot stars of the Trapezium. Visible to the naked eye as the middle "star" of Orion\'s sword, it is a stellar nursery of some 700 young stars and protoplanetary discs.' },
   { name: 'Carina Nebula', aliases: ['NGC 3372', 'Eta Carinae Nebula'], ra: 161.29, dec: -59.87, dist: 8500, size: 300, type: 0, seed: 2, bright: 1.1, stars: 10, desc: 'One of the largest and brightest nebulae in the sky, four times the size of the Orion Nebula, home to the unstable hypergiant Eta Carinae and the Mystic Mountain pillars.' },
   { name: 'Eagle Nebula', aliases: ['M16', 'NGC 6611', 'Pillars of Creation'], ra: 274.70, dec: -13.80, dist: 7000, size: 70, type: 0, seed: 3, bright: 1.0, stars: 5, pillars: 1, desc: 'A young open cluster embedded in an emission nebula, famous for the Pillars of Creation — towers of gas and dust several light-years tall, sculpted by the ultraviolet light of newborn stars.' },
   { name: 'Lagoon Nebula', aliases: ['M8', 'NGC 6523'], ra: 270.92, dec: -24.38, dist: 4100, size: 110, type: 0, seed: 4, bright: 1.0, stars: 5, desc: 'A giant interstellar cloud in Sagittarius, one of only two star-forming nebulae faintly visible to the naked eye from mid-northern latitudes.' },
@@ -218,6 +220,13 @@ export class NebulaManager {
     mesh.visible = false;
     this.group.add(mesh);
     const item = { def, mesh, mat, pos, R, stars: stars.slice(0, Math.min(sc, 4)), starCount: sc };
+    if (def.volume) {
+      // baked volume: sky-aligned frame (East, North, line of sight) so it looks right from Earth
+      const { E, N, L } = skyFrame(def.ra, def.dec);
+      item.frame = { E, N, L };
+      item.worldToVol = new THREE.Matrix3().set(E.x, E.y, E.z, N.x, N.y, N.z, L.x, L.y, L.z);
+      item.volume = null; item.volumeState = 'idle';
+    }
     this.items.push(item);
     return item;
   }
@@ -266,6 +275,21 @@ export class NebulaManager {
     const pts = [], cols = [], lums = [], seeds = [];
     for (const it of this.items) {
       const count = it.def.type === 0 ? Math.max(it.starCount, 3) * 6 : it.def.type === 3 ? 12 : 1;
+      if (it.frame) {
+        // baked nebula: its real named stars plus a young cluster (the ONC) concentrated on the core
+        const { E, N, L } = it.frame;
+        const put = (x, y, z, col, lum) => {
+          const p = new THREE.Vector3().addScaledVector(E, x).addScaledVector(N, y).addScaledVector(L, z).multiplyScalar(LY).add(it.pos).multiplyScalar(1 / LY);
+          pts.push(p.x, p.y, p.z); cols.push(col[0], col[1], col[2]); lums.push(lum); seeds.push(rng.float());
+        };
+        for (const s of it.def.volStars) put(s.p[0], s.p[1], s.p[2], s.col, s.lum);
+        for (let k = 0; k < 70; k++) {
+          const d = rng.unitVector(), rr = 0.15 + 2.6 * Math.pow(rng.float(), 1.8);
+          const hot = rng.float() < 0.25;
+          put(d[0] * rr, d[1] * rr, d[2] * rr * 0.6 - 0.2, hot ? [0.7, 0.8, 1.0] : [1.0, 0.72 + 0.1 * rng.float(), 0.55], hot ? 300 + 2500 * rng.float() : 8 + 60 * rng.float());
+        }
+        continue;
+      }
       for (let k = 0; k < count; k++) {
         let p;
         if (it.def.type === 1 || it.def.type === 2) p = new THREE.Vector3(0, 0, 0);
@@ -291,6 +315,16 @@ export class NebulaManager {
     this.starGroup.add(this.stars);
   }
 
+  _loadVolume(it) {
+    it.volumeState = 'loading';
+    loadNebulaVolume(it.def.volume).then(({ mat, meta }) => {
+      mat.uniforms.uBand.value = it.mat.uniforms.uBand ? it.mat.uniforms.uBand.value : 0;
+      it.proceduralMat = it.mat;
+      it.mat = mat; it.mesh.material = mat; it.volume = meta; it.volumeState = 'ready';
+      if (this.ctx.observatory) this.ctx.observatory.register(mat);
+    }).catch(e => { console.warn('[nebula volume]', it.def.volume, e && e.message); it.volumeState = 'failed'; });
+  }
+
   update(dt, t, camPos) {
     const cam = this.engine.camera;
     this._m3.setFromMatrix4(cam.matrixWorld);
@@ -304,15 +338,25 @@ export class NebulaManager {
       const inside = d < it.R;
       if (!inside && rpx < 1.2) { it.mesh.visible = false; continue; }
       it.mesh.visible = true; vis++;
+      const frac = Math.min(rpx / (h * 0.5), 1);
+      // fade tiny ones in, and dim when very far so they read as soft glows
+      const fade = THREE.MathUtils.clamp((rpx - 1.2) / 3, 0, 1);
+      if (it.frame) {
+        if (it.volumeState === 'idle' && (inside || rpx > 8)) this._loadVolume(it);
+        if (it.volume) {
+          // baked volume: finer steps than the procedural ones (thin ionisation fronts), jittered per frame for the TAA
+          const vSteps = THREE.MathUtils.clamp(Math.round(this.engine.q.nebulaSteps * 1.5 * this.engine.volumeStepScale), 32, 128);
+          updateVolumeUniforms(it, camPos, this._m3, inside ? vSteps : Math.round(THREE.MathUtils.lerp(24, vSteps, Math.sqrt(frac))), fade, this.engine.frame);
+          continue;
+        }
+      }
       const u = it.mat.uniforms;
       u.uCamToWorld.value.copy(this._m3);
       u.uCamLocal.value.copy(camPos).sub(it.pos).multiplyScalar(1 / it.R);
       u.uTime.value = t;
       // step count by apparent size
-      const frac = Math.min(rpx / (h * 0.5), 1);
       u.uSteps.value = Math.round(THREE.MathUtils.lerp(12, qSteps, Math.sqrt(frac)));
-      // fade tiny ones in, and dim when very far so they read as soft glows
-      u.uFade.value = THREE.MathUtils.clamp((rpx - 1.2) / 3, 0, 1);
+      u.uFade.value = fade;
     }
     this.visibleCount = vis;
     this.engine.nebulaActive = vis > 0 && this.group.visible;
