@@ -19,9 +19,9 @@ const DEM_SIZE = 256;
 
 export const TILE_SOURCES = {
   // GIBS EPSG:4326 matrix: level z tiles span 288/2^z degrees (exact grid from level 3 = 36° on); 512 px tiles
-  earth: { deg: z => 288 / Math.pow(2, z), root: 3, max: 7, size: 512, minHi: 5, minLo: 3, url: GIBS('BlueMarble_NextGeneration', '500m'), night: { url: GIBS('VIIRS_CityLights_2012', '500m'), max: 7 }, dem: { kind: 'terrarium', url: TERRARIUM, max: 11, clampSea: true, minElev: 0 }, credit: 'NASA GIBS: Blue Marble Next Generation · VIIRS city lights · AWS Terrarium elevation' },
+  earth: { deg: z => 288 / Math.pow(2, z), root: 3, max: 7, size: 512, minHi: 6, minLo: 3, toneRange: 4, oceanMatch: true, activeRpx: 1500, url: GIBS('BlueMarble_NextGeneration', '500m'), night: { url: GIBS('VIIRS_CityLights_2012', '500m'), max: 7 }, dem: { kind: 'terrarium', url: TERRARIUM, max: 11, clampSea: true, minElev: 0 }, credit: 'NASA GIBS: Blue Marble Next Generation · VIIRS city lights · AWS Terrarium elevation' },
   // Trek: level z tiles span 180/2^z degrees; 256 px tiles
-  moon: { deg: z => 180 / Math.pow(2, z), root: 1, max: 7, size: 256, minHi: 5, minLo: 4, url: TREK('Moon', 'LRO_WAC_Mosaic_Global_303ppd_v02'), dem: { kind: 'gray8', url: TREK_PNG('Moon', 'LRO_LOLA_DEM_Global_128ppd_v04'), range: [-9130, 10780], max: 5, minElev: -9130 }, credit: 'NASA LRO WAC mosaic · LOLA elevation (Moon Trek)' },
+  moon: { deg: z => 180 / Math.pow(2, z), root: 1, max: 7, size: 256, minHi: 5, minLo: 4, toneRange: 8, url: TREK('Moon', 'LRO_WAC_Mosaic_Global_303ppd_v02'), dem: { kind: 'gray8', url: TREK_PNG('Moon', 'LRO_LOLA_DEM_Global_128ppd_v04'), range: [-9130, 10780], max: 5, minElev: -9130 }, credit: 'NASA LRO WAC mosaic · LOLA elevation (Moon Trek)' },
   mars: { deg: z => 180 / Math.pow(2, z), root: 1, max: 7, size: 256, minHi: 5, minLo: 4, url: TREK('Mars', 'Mars_Viking_MDIM21_ClrMosaic_global_232m'), dem: { kind: 'gray8', url: TREK_PNG('Mars', 'Mars_MGS_MOLA_DEM_mosaic_global_463m_8'), range: [-8200, 21230], max: 5, minElev: -8200 }, credit: 'NASA Viking MDIM 2.1 · MOLA elevation (Mars Trek)' },
   mercury: { deg: z => 180 / Math.pow(2, z), root: 1, max: 7, size: 256, minHi: 5, minLo: 4, url: TREK('Mercury', 'Mercury_MESSENGER_MDIS_Basemap_BDR_Mosaic_Global_166m'), credit: 'NASA MESSENGER MDIS mosaic (Mercury Trek)' },
 };
@@ -126,7 +126,8 @@ export class TileGlobe {
     this._flushUploads(frame);
     this._usedTextures.clear();
     const wasActive = this.active;
-    this.active = rpx > (wasActive ? 380 : 440);
+    const on = this.src.activeRpx || 440;   // below this the base (8K) map is as sharp as the screen
+    this.active = rpx > (wasActive ? on * 0.86 : on);
     if (!this.active) { if (wasActive) this._hideAll(this.roots); return; }
     this.visibleCount = 0; this.queue.length = 0;
     const camDist = camLocal.length();
@@ -206,7 +207,7 @@ export class TileGlobe {
     t.fade = Math.min(1, t.fade + this.dt / 0.3);
     if (t.nightTex) t.nightFade = Math.min(1, t.nightFade + this.dt / 0.4);
     if (!t.mesh) {
-      const u = Object.assign({}, base.uniforms, { uMap: { value: t.tex }, uTileUV: { value: t.uvRect }, uNightMap: { value: t.nightTex || base.uniforms.uNightMap.value }, uNightTileUV: { value: t.nightTex ? t.uvRect : IDENTITY_UV }, uParentMap: { value: fallback }, uParentUV: { value: t.fallback?.uvRect || IDENTITY_UV }, uBaseMap: base.uniforms.uMap, uBaseNight: base.uniforms.uNightMap, uTileFade: { value: 0 }, uNightFade: { value: 0 }, uTileSize: { value: this.src.size }, uBaseTexels: { value: 64 }, uDem: { value: this.dummyDem }, uDemOn: { value: 0 }, uDemScale: { value: 1 / this.radiusM }, uDemTexel: { value: this._demTexel(t) }, uDemStep: { value: this.src.dem ? (this.src.dem.kind === 'gray8' ? (this.src.dem.range[1] - this.src.dem.range[0]) / 255 * 0.35 : 2) : 0 } });
+      const u = Object.assign({}, base.uniforms, { uMap: { value: t.tex }, uTileUV: { value: t.uvRect }, uNightMap: { value: t.nightTex || base.uniforms.uNightMap.value }, uNightTileUV: { value: t.nightTex ? t.uvRect : IDENTITY_UV }, uParentMap: { value: fallback }, uParentUV: { value: t.fallback?.uvRect || IDENTITY_UV }, uBaseMap: base.uniforms.uMap, uBaseNight: base.uniforms.uNightMap, uTileFade: { value: 0 }, uNightFade: { value: 0 }, uTileSize: { value: this.src.size }, uBaseTexels: { value: 64 }, uToneRange: { value: this.src.toneRange || 2.2 }, uOceanMatch: { value: this.src.oceanMatch ? 1 : 0 }, uDem: { value: this.dummyDem }, uDemOn: { value: 0 }, uDemScale: { value: 1 / this.radiusM }, uDemTexel: { value: this._demTexel(t) }, uDemStep: { value: this.src.dem ? (this.src.dem.kind === 'gray8' ? (this.src.dem.range[1] - this.src.dem.range[0]) / 255 * 0.35 : 2) : 0 } });
       const mat = new THREE.ShaderMaterial({ uniforms: u, vertexShader: base.vertexShader, fragmentShader: base.fragmentShader, defines: { TILE_BIAS: ((t.z + 1) * 1.5e-7).toExponential(2), TILE_SURFACE: 1 } });
       u.uParentNight = { value: fallbackNight }; u.uParentNightUV = { value: nightParent?.uvRect || IDENTITY_UV };
       t.mesh = new THREE.Mesh(tileGeometry(t.lon0, t.lon1, t.lat0, t.lat1, this.src.dem ? 40 : 16), mat);

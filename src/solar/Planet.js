@@ -49,7 +49,7 @@ const surfFrag = /* glsl */`
   #ifdef TILE_SURFACE
   uniform sampler2D uParentMap, uBaseMap, uBaseNight, uParentNight;
   uniform vec4 uParentUV, uParentNightUV;
-  uniform float uTileFade, uNightFade, uTileSize, uBaseTexels;   // uBaseTexels: base-map texels across this tile
+  uniform float uTileFade, uNightFade, uTileSize, uBaseTexels, uToneRange, uOceanMatch;   // uToneRange: max tile->base tone correction factor (per source)   // uBaseTexels: base-map texels across this tile
   uniform sampler2D uDem; uniform float uDemOn, uDemScale, uDemStep; uniform vec2 uDemTexel;   // height field (m), quantisation step (m), metres per texel (east, north)
   #endif
   ${HASH}
@@ -155,11 +155,20 @@ const surfFrag = /* glsl */`
       float baseLod = log2(max(uBaseTexels / 8.0, 1.0));
       vec3 lowBase = srgb2lin(textureLod(uBaseMap, uv, baseLod).rgb) * uTint;
       vec3 lowTile = srgb2lin(textureLod(uMap, tileUv, tileLod).rgb) * uTint;
-      albedo *= clamp(lowBase / max(lowTile, vec3(0.004)), vec3(0.2), vec3(8.0));   // the Trek WAC mosaic is ~3-5x darker than the LROC colour base
+      albedo *= clamp(lowBase / max(lowTile, vec3(0.004)), vec3(1.0 / uToneRange), vec3(uToneRange));   // the Trek WAC mosaic is ~3-5x darker than the LROC colour base
       if (uParentUV.z > 1.0) {
         vec3 lowParent = srgb2lin(textureLod(uParentMap, parentUv, tileLod).rgb) * uTint;
-        parentAlbedo *= clamp(lowBase / max(lowParent, vec3(0.004)), vec3(0.2), vec3(8.0));
+        parentAlbedo *= clamp(lowBase / max(lowParent, vec3(0.004)), vec3(1.0 / uToneRange), vec3(uToneRange));
       }
+    }
+    // Earth: open water in the tiles carries no useful detail at 500 m but a different colour processing than the globe;
+    // detect it in the tile itself (dark, blue-dominant) and take the base map's water there, so coastlines stay sharp
+    if (uOceanMatch > 0.5) {
+      vec3 raw = srgb2lin(texture2D(uMap, tileUv).rgb);
+      float wat = smoothstep(1.4, 2.2, raw.b / (raw.r + 0.002)) * (1.0 - smoothstep(0.06, 0.16, dot(raw, vec3(0.3, 0.59, 0.11))));   // blue-dominant and dark (linear)
+      vec3 lowB = srgb2lin(textureLod(uBaseMap, uv, log2(max(uBaseTexels / 64.0, 1.0))).rgb) * uTint;
+      albedo = mix(albedo, lowB, wat);
+      parentAlbedo = mix(parentAlbedo, lowB, wat);
     }
     albedo = mix(parentAlbedo, albedo, smoothstep(0.0, 1.0, uTileFade));
     // Resolve the final pixel at a tile boundary against the shared base map.
