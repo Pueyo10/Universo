@@ -7,3 +7,4 @@ shots/
 .playwright-cli/
 output/playwright/
 .claude/worktrees/
+__pycache__/
